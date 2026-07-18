@@ -6,8 +6,8 @@ um único ambiente.
 
 ## Stack
 
-Next.js 16 (App Router) · TypeScript · Tailwind 4 · Recharts · Supabase
-(Postgres + Auth + Storage).
+Next.js 16 (App Router) · TypeScript · Tailwind 4 · Recharts · next-themes ·
+Supabase (Postgres + Auth + Storage).
 
 ## Estado atual
 
@@ -88,3 +88,7 @@ supabase/migrations/   schema, RLS e funções de agregação
   sozinha não dá.
 - **"Vencido" nunca é armazenado** — é derivado de status em aberto somado a
   vencimento no passado, na view `titulos_view` e em `statusEfetivo()`.
+- **Tema claro/escuro/sistema** via next-themes, com a classe `.dark` no
+  `<html>`. Não existe `@media (prefers-color-scheme)` no CSS de propósito:
+  teria dois donos do mesmo estado e a escolha manual perderia para o SO. Toda
+  a interface é temada por variáveis CSS, inclusive as séries dos gráficos.

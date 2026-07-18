@@ -1,3 +1,4 @@
+import { SeletorTema } from "@/components/layout/seletor-tema";
 import { getCompetenciaAtual, getEmpresa } from "@/lib/dados";
 import { competenciaExtenso } from "@/lib/format";
 
@@ -28,6 +29,7 @@ export async function BarraTopo() {
             {competenciaExtenso(competencia)}
           </strong>
         </span>
+        <SeletorTema />
         <div className="flex items-center gap-2">
           <span className="grid size-8 place-items-center rounded-full bg-brand text-xs font-semibold text-brand-foreground">
             CQ
