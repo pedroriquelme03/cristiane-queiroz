@@ -38,6 +38,7 @@ export function FormularioLogin({
         rotulo="E-mail"
         tipo="email"
         autoComplete="username"
+        defaultValue={estado.email}
         erro={estado.campos?.email}
         desabilitado={desabilitado}
       />
@@ -60,6 +61,7 @@ function Campo({
   rotulo,
   tipo,
   autoComplete,
+  defaultValue,
   erro,
   desabilitado,
 }: {
@@ -67,6 +69,7 @@ function Campo({
   rotulo: string;
   tipo: string;
   autoComplete: string;
+  defaultValue?: string;
   erro?: string;
   desabilitado: boolean;
 }) {
@@ -80,6 +83,7 @@ function Campo({
         name={id}
         type={tipo}
         autoComplete={autoComplete}
+        defaultValue={defaultValue}
         disabled={desabilitado}
         aria-invalid={erro ? true : undefined}
         aria-describedby={erro ? `${id}-erro` : undefined}

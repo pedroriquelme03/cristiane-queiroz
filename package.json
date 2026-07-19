@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "verifica:parsers": "tsx scripts/verifica-parsers.ts"
+    "verifica:parsers": "tsx scripts/verifica-parsers.ts",
+    "verifica:validacao": "tsx scripts/verifica-validacao.mts",
+    "verifica": "npm run verifica:parsers && npm run verifica:validacao"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",

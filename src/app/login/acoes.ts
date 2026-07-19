@@ -11,6 +11,11 @@ export interface EstadoLogin {
   erro?: string;
   /** Erros por campo, para marcar o input correspondente. */
   campos?: Partial<Record<"email" | "senha", string>>;
+  /**
+   * E-mail digitado, devolvido para repovoar o campo: o React limpa os
+   * formulários depois que a action roda. A senha nunca volta.
+   */
+  email?: string;
 }
 
 const esquemaLogin = z.object({
@@ -39,10 +44,13 @@ export async function entrar(
   _anterior: EstadoLogin,
   formData: FormData,
 ): Promise<EstadoLogin> {
+  const emailDigitado = String(formData.get("email") ?? "");
+
   if (!supabaseConfigurado) {
     return {
       erro:
         "O banco de dados ainda não foi provisionado, então o login está indisponível.",
+      email: emailDigitado,
     };
   }
 
@@ -59,7 +67,7 @@ export async function entrar(
         campos[campo] ??= problema.message;
       }
     }
-    return { campos };
+    return { campos, email: emailDigitado };
   }
 
   const supabase = await createClient();
@@ -68,7 +76,7 @@ export async function entrar(
     password: analise.data.senha,
   });
 
-  if (error) return { erro: traduzirErro(error.message) };
+  if (error) return { erro: traduzirErro(error.message), email: emailDigitado };
 
   // O destino vem da querystring que o middleware montou ao barrar a rota
   const destino = String(formData.get("redirect") || "/");

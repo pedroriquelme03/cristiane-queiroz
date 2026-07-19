@@ -1,3 +1,4 @@
+import { DialogoLancamento } from "@/components/financeiro/dialogo-lancamento";
 import { GraficoMovimento } from "@/components/graficos/grafico-movimento";
 import { GraficoSaldo } from "@/components/graficos/grafico-saldo";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
@@ -79,6 +80,7 @@ export default async function FluxoDeCaixaPage() {
         <CardHeader
           titulo="Lançamentos do período"
           descricao={`${lancamentos.length} movimentações em ${competenciaExtenso(competencia)}`}
+          acao={<DialogoLancamento contas={contas} />}
         />
         <CardBody className="px-0 py-0">
           <div className="max-h-[28rem] overflow-auto">

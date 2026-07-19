@@ -1,11 +1,15 @@
+import { DialogoTitulo } from "@/components/financeiro/dialogo-titulo";
 import { TabelaTitulos } from "@/components/financeiro/tabela-titulos";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Kpi } from "@/components/ui/kpi";
-import { getTitulos, statusEfetivo } from "@/lib/dados";
+import { getPlanoContas, getTitulos, statusEfetivo } from "@/lib/dados";
 import { diasAte, moeda } from "@/lib/format";
 
 export default async function ContasAPagarPage() {
-  const titulos = await getTitulos("pagar");
+  const [titulos, contas] = await Promise.all([
+    getTitulos("pagar"),
+    getPlanoContas(),
+  ]);
 
   const abertos = titulos.filter((t) => statusEfetivo(t) === "aberto");
   const vencidos = titulos.filter((t) => statusEfetivo(t) === "vencido");
@@ -56,6 +60,7 @@ export default async function ContasAPagarPage() {
         <CardHeader
           titulo="Contas a pagar em aberto"
           descricao="Ordenadas por vencimento"
+          acao={<DialogoTitulo tipo="pagar" contas={contas} />}
         />
         <CardBody className="px-0 py-0">
           <TabelaTitulos titulos={abertos} rotuloContraparte="Fornecedor" />

@@ -26,14 +26,16 @@ movimento. O banco ainda não foi provisionado.
 | Maturidade empresarial | Pronta |
 | Documentos | Listagem pronta; download depende do Storage |
 | Reuniões e treinamentos | Pronta |
-| Login e perfis de acesso | Schema e middleware prontos, tela pendente |
-| Importação de planilha | Pendente |
+| Login e perfis de acesso | Tela e ações prontas; autenticam quando houver banco |
+| Importação de planilha | Assistente completo; grava quando houver banco |
+| Lançamento manual | Formulários completos; gravam quando houver banco |
 
 ## Como rodar
 
 ```bash
 npm install
 npm run dev
+npm run verifica   # parsers de importação e esquemas de validação
 ```
 
 Sem variáveis de ambiente o app sobe com os dados de demonstração e sem login.
@@ -88,6 +90,12 @@ supabase/migrations/   schema, RLS e funções de agregação
   sozinha não dá.
 - **"Vencido" nunca é armazenado** — é derivado de status em aberto somado a
   vencimento no passado, na view `titulos_view` e em `statusEfetivo()`.
+- **Server actions devolvem os valores enviados.** O React limpa formulários
+  não controlados depois que a action roda; sem devolver os valores, um erro
+  de validação apagaria tudo que o usuário digitou. A senha nunca volta.
+- **O `xlsx` vem do CDN da SheetJS**, não do npm: a versão publicada no npm
+  (0.18.5) tem duas vulnerabilidades altas sem correção, e o parser processa
+  arquivo enviado pelo usuário.
 - **Tema claro/escuro/sistema** via next-themes, com a classe `.dark` no
   `<html>`. Não existe `@media (prefers-color-scheme)` no CSS de propósito:
   teria dois donos do mesmo estado e a escolha manual perderia para o SO. Toda
