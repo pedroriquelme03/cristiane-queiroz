@@ -45,6 +45,7 @@ export const ABAS_FINANCEIRO = [
   { href: "/financeiro/contas-a-receber", rotulo: "Contas a receber" },
   { href: "/financeiro/dre", rotulo: "DRE gerencial" },
   { href: "/financeiro/orcamento", rotulo: "Orçamento" },
+  { href: "/financeiro/importar", rotulo: "Importar planilha" },
 ];
 
 /** Abas da tela Empresa. */
