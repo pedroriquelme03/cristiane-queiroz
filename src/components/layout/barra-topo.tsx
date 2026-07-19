@@ -1,3 +1,6 @@
+import { LogOut } from "lucide-react";
+
+import { sair } from "@/app/login/acoes";
 import { SeletorTema } from "@/components/layout/seletor-tema";
 import { getCompetenciaAtual, getEmpresa } from "@/lib/dados";
 import { competenciaExtenso } from "@/lib/format";
@@ -38,6 +41,16 @@ export async function BarraTopo() {
             <p className="text-sm font-medium">Cristiane Queiroz</p>
             <p className="text-xs text-muted-foreground">Consultoria</p>
           </div>
+          <form action={sair}>
+            <button
+              type="submit"
+              title="Sair"
+              aria-label="Sair"
+              className="grid size-8 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-surface-muted hover:text-foreground"
+            >
+              <LogOut className="size-4" aria-hidden />
+            </button>
+          </form>
         </div>
       </div>
     </header>

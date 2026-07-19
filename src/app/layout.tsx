@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
-import { BarraLateral } from "@/components/layout/barra-lateral";
-import { BarraTopo } from "@/components/layout/barra-topo";
 import { ProvedorTema } from "@/components/layout/provedor-tema";
 
 import "./globals.css";
@@ -37,19 +35,7 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full">
-        <ProvedorTema>
-          <div className="flex h-dvh">
-            <div className="hidden md:block">
-              <BarraLateral />
-            </div>
-            <div className="flex min-w-0 flex-1 flex-col">
-              <BarraTopo />
-              <main className="flex-1 overflow-y-auto px-6 py-6">
-                <div className="mx-auto max-w-7xl space-y-6">{children}</div>
-              </main>
-            </div>
-          </div>
-        </ProvedorTema>
+        <ProvedorTema>{children}</ProvedorTema>
       </body>
     </html>
   );
