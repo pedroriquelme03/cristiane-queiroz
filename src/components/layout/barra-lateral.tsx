@@ -3,13 +3,15 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-import { NAVEGACAO, ROTULOS_GRUPO, type ItemNavegacao } from "@/lib/navegacao";
+import { ORDEM_GRUPOS, ROTULOS_GRUPO, itensVisiveis } from "@/lib/navegacao";
+import type { Papel } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-const GRUPOS: ItemNavegacao["grupo"][] = ["visao", "gestao", "consultoria"];
-
-export function BarraLateral() {
+export function BarraLateral({ role }: { role: Papel }) {
   const pathname = usePathname();
+
+  const itens = itensVisiveis(role);
+  const grupos = ORDEM_GRUPOS.filter((g) => itens.some((i) => i.grupo === g));
 
   const estaAtivo = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
@@ -35,13 +37,13 @@ export function BarraLateral() {
       </Link>
 
       <div className="flex-1 overflow-y-auto px-3 py-4">
-        {GRUPOS.map((grupo) => (
+        {grupos.map((grupo) => (
           <div key={grupo} className="mb-5 last:mb-0">
             <h2 className="px-2 pb-2 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
               {ROTULOS_GRUPO[grupo]}
             </h2>
             <ul className="space-y-0.5">
-              {NAVEGACAO.filter((item) => item.grupo === grupo).map((item) => {
+              {itens.filter((item) => item.grupo === grupo).map((item) => {
                 const ativo = estaAtivo(item.href);
                 const Icone = item.icone;
                 return (

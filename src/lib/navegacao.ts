@@ -2,20 +2,27 @@ import {
   Building2,
   CalendarCheck,
   ClipboardList,
+  CreditCard,
   FileText,
   Gauge,
   LayoutDashboard,
+  Layers,
+  ShieldCheck,
   Stethoscope,
   TrendingUp,
   Wallet,
   type LucideIcon,
 } from "lucide-react";
 
+import type { Papel } from "@/lib/types";
+
 export interface ItemNavegacao {
   href: string;
   rotulo: string;
   icone: LucideIcon;
-  grupo: "visao" | "gestao" | "consultoria";
+  grupo: "visao" | "gestao" | "consultoria" | "conta" | "admin";
+  /** Papéis que enxergam o item. Ausente = todos os papéis. */
+  papeis?: Papel[];
 }
 
 export const NAVEGACAO: ItemNavegacao[] = [
@@ -30,13 +37,36 @@ export const NAVEGACAO: ItemNavegacao[] = [
   { href: "/maturidade", rotulo: "Maturidade", icone: Gauge, grupo: "consultoria" },
   { href: "/documentos", rotulo: "Documentos", icone: FileText, grupo: "consultoria" },
   { href: "/reunioes", rotulo: "Reuniões e treinamentos", icone: CalendarCheck, grupo: "consultoria" },
+
+  // Assinatura do próprio tenant: dono e gestor da empresa
+  { href: "/assinatura", rotulo: "Assinatura", icone: CreditCard, grupo: "conta", papeis: ["admin", "cliente"] },
+
+  // Painel do super admin (controle da plataforma)
+  { href: "/admin", rotulo: "Visão geral", icone: ShieldCheck, grupo: "admin", papeis: ["admin"] },
+  { href: "/admin/planos", rotulo: "Planos", icone: Layers, grupo: "admin", papeis: ["admin"] },
+  { href: "/admin/assinaturas", rotulo: "Assinaturas dos clientes", icone: CreditCard, grupo: "admin", papeis: ["admin"] },
 ];
 
 export const ROTULOS_GRUPO: Record<ItemNavegacao["grupo"], string> = {
   visao: "Visão geral",
   gestao: "Gestão",
   consultoria: "Consultoria",
+  conta: "Minha conta",
+  admin: "Administração",
 };
+
+/** Ordem em que os grupos aparecem na barra lateral. */
+export const ORDEM_GRUPOS: ItemNavegacao["grupo"][] = [
+  "visao",
+  "gestao",
+  "consultoria",
+  "conta",
+  "admin",
+];
+
+export function itensVisiveis(role: Papel) {
+  return NAVEGACAO.filter((item) => !item.papeis || item.papeis.includes(role));
+}
 
 /** Abas da tela Financeiro. */
 export const ABAS_FINANCEIRO = [

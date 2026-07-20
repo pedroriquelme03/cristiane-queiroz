@@ -29,14 +29,24 @@ movimento. O banco ainda não foi provisionado.
 | Login e perfis de acesso | Tela e ações prontas; autenticam quando houver banco |
 | Importação de planilha | Assistente completo; grava quando houver banco |
 | Lançamento manual | Formulários completos; gravam quando houver banco |
+| Assinatura do cliente | Plano, faturas, pagamento (PIX de demonstração) e troca de plano |
+| Super admin — planos | CRUD de planos que aparecem na vitrine do cliente |
+| Super admin — assinaturas | Carteira de tenants: pagamento, troca de plano, bloqueio |
+| Bloqueio por inadimplência | Ativo: trava o tenant após a carência, deixando só a assinatura |
 
 ## Como rodar
 
 ```bash
 npm install
 npm run dev
-npm run verifica   # parsers de importação e esquemas de validação
+npm run verifica   # parsers, validação e lógica de bloqueio de assinatura
 ```
+
+A sessão de demonstração é o **super admin** da consultoria (papel `admin`),
+por isso o painel de administração aparece na barra lateral. Para ver a
+plataforma na pele do cliente — inclusive o bloqueio por atraso — troque
+`role`/`empresaId` em [src/lib/sessao.ts](src/lib/sessao.ts) (ex.: `role:
+"cliente"`, `empresaId: "emp-005"`, um tenant bloqueado).
 
 Sem variáveis de ambiente o app sobe com os dados de demonstração e sem login.
 
@@ -48,6 +58,7 @@ Sem variáveis de ambiente o app sobe com os dados de demonstração e sem login
    - `0002_rls.sql` — Row Level Security (admin / consultor / cliente)
    - `0003_funcoes.sql` — agregações: KPIs, fluxo diário, projeção, DRE
    - `0004_seed_indicadores.sql` — biblioteca de indicadores por segmento
+   - `0005_assinaturas.sql` — planos, assinaturas, faturas, `empresa_bloqueada()`
 3. Gerar os tipos:
    ```bash
    npx supabase gen types typescript --project-id <ref> > src/lib/supabase/types.ts
@@ -57,7 +68,13 @@ Sem variáveis de ambiente o app sobe com os dados de demonstração e sem login
    única fronteira entre a interface e a fonte de dados.
 5. Remover o atalho no topo de
    [src/lib/supabase/middleware.ts](src/lib/supabase/middleware.ts), que hoje
-   deixa passar sem sessão quando não há chaves configuradas.
+   deixa passar sem sessão quando não há chaves configuradas, e implementar ali
+   o reforço server-side do bloqueio (`rpc('empresa_bloqueada')`) marcado com
+   TODO — o guarda no cliente já cobre a experiência, o middleware impede burlar
+   por navegação direta.
+6. Ligar o gateway de pagamento (Mercado Pago/Asaas/Stripe) nos pontos marcados
+   com `TODO(gateway)` em [src/app/(app)/assinatura/acoes.ts](src/app/(app)/assinatura/acoes.ts):
+   emitir a cobrança e dar baixa na fatura pelo webhook.
 
 ## Organização
 
@@ -89,7 +106,16 @@ supabase/migrations/   schema, RLS e funções de agregação
   entrada/saída, a posição da barra acima ou abaixo do zero é a folga que a cor
   sozinha não dá.
 - **"Vencido" nunca é armazenado** — é derivado de status em aberto somado a
-  vencimento no passado, na view `titulos_view` e em `statusEfetivo()`.
+  vencimento no passado, na view `titulos_view` e em `statusEfetivo()`. O mesmo
+  vale para o bloqueio da assinatura: `calcularEstado()` e `empresa_bloqueada()`
+  derivam de assinatura + faturas, nunca de um campo gravado.
+- **Super admin é o papel `admin`**, não um papel novo: o schema já o define como
+  "controle total da plataforma". Ele nunca é bloqueado por inadimplência —
+  precisa gerenciar as assinaturas dos outros.
+- **Bloqueio em duas camadas.** O guarda no cliente
+  ([guarda-assinatura.tsx](src/components/assinatura/guarda-assinatura.tsx)) é a
+  experiência; o reforço no middleware (server-side) é o que impede burlar por
+  URL direta. Só a rota `/assinatura` passa quando bloqueado.
 - **Server actions devolvem os valores enviados.** O React limpa formulários
   não controlados depois que a action roda; sem devolver os valores, um erro
   de validação apagaria tudo que o usuário digitou. A senha nunca volta.

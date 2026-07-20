@@ -166,6 +166,106 @@ export interface Alerta {
   descricao: string;
 }
 
+// ---------------------------------------------------------------------------
+// Assinaturas
+// ---------------------------------------------------------------------------
+
+export type CicloCobranca = "mensal" | "anual";
+
+export type StatusAssinatura =
+  | "trial"
+  | "ativa"
+  | "inadimplente"
+  | "bloqueada"
+  | "cancelada";
+
+export type StatusFatura = "aberta" | "paga" | "cancelada";
+export type StatusFaturaEfetivo = StatusFatura | "vencida";
+
+export type MetodoPagamento =
+  | "pix"
+  | "boleto"
+  | "cartao"
+  | "transferencia"
+  | "outro";
+
+export interface Plano {
+  id: string;
+  nome: string;
+  descricao: string;
+  precoMensal: number;
+  /** Preço anual cheio (12x). null = plano não oferece ciclo anual. */
+  precoAnual: number | null;
+  trialDias: number;
+  /** Recursos exibidos na vitrine do cliente. */
+  recursos: string[];
+  /** null = ilimitado. */
+  limiteUsuarios: number | null;
+  limiteEmpresas: number | null;
+  publico: boolean;
+  ativo: boolean;
+  ordem: number;
+}
+
+export interface Assinatura {
+  id: string;
+  empresaId: string;
+  planoId: string;
+  ciclo: CicloCobranca;
+  status: StatusAssinatura;
+  diaVencimento: number;
+  carenciaDias: number;
+  inicio: string;
+  trialFim: string | null;
+  bloqueioManual: boolean;
+  canceladaEm: string | null;
+}
+
+export interface Fatura {
+  id: string;
+  assinaturaId: string;
+  empresaId: string;
+  competencia: string;
+  emissao: string;
+  vencimento: string;
+  valor: number;
+  valorPago: number;
+  status: StatusFatura;
+  pagoEm: string | null;
+  metodoPagamento: MetodoPagamento | null;
+  referenciaExterna: string | null;
+  observacao: string | null;
+}
+
+/**
+ * Estado calculado da assinatura de uma empresa. É o que o guarda de acesso e a
+ * tela de assinatura consomem — deriva de assinatura + faturas, nunca é gravado.
+ */
+export interface EstadoAssinatura {
+  empresaId: string;
+  status: StatusAssinatura;
+  /** Acesso ao sistema deve ser bloqueado agora. */
+  bloqueada: boolean;
+  /** Existe fatura vencida em aberto, mas ainda dentro da carência. */
+  emCarencia: boolean;
+  /** Dias de atraso da fatura vencida mais antiga (0 se nenhuma). */
+  diasAtraso: number;
+  /** Dias restantes até o bloqueio (null quando não há atraso ou já bloqueada). */
+  diasParaBloqueio: number | null;
+  /** Fatura em aberto mais próxima do vencimento, se houver. */
+  faturaEmAberto: Fatura | null;
+  totalEmAberto: number;
+}
+
+/** Uma empresa (tenant) com o resumo da sua assinatura, para o painel admin. */
+export interface TenantAssinatura {
+  empresa: Empresa;
+  plano: Plano;
+  assinatura: Assinatura;
+  estado: EstadoAssinatura;
+  faturas: Fatura[];
+}
+
 /** Retorno de dashboard_kpis() */
 export interface DashboardKpis {
   competencia: string;

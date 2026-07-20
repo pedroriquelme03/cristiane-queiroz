@@ -1,19 +1,34 @@
 import type { ReactNode } from "react";
 
+import { GuardaAssinatura } from "@/components/assinatura/guarda-assinatura";
 import { BarraLateral } from "@/components/layout/barra-lateral";
 import { BarraTopo } from "@/components/layout/barra-topo";
+import { getEstadoAssinaturaAtual } from "@/lib/dados-assinatura";
+import { getSessao } from "@/lib/sessao";
 
 /** Shell autenticado: tudo que fica atrás do login mora neste grupo. */
-export default function AppLayout({ children }: { children: ReactNode }) {
+export default async function AppLayout({ children }: { children: ReactNode }) {
+  const [sessao, estado] = await Promise.all([
+    getSessao(),
+    getEstadoAssinaturaAtual(),
+  ]);
+
   return (
     <div className="flex h-dvh">
       <div className="hidden md:block">
-        <BarraLateral />
+        <BarraLateral role={sessao.role} />
       </div>
       <div className="flex min-w-0 flex-1 flex-col">
         <BarraTopo />
         <main className="flex-1 overflow-y-auto px-6 py-6">
-          <div className="mx-auto max-w-7xl space-y-6">{children}</div>
+          <div className="mx-auto max-w-7xl space-y-6">
+            {/* Super admin nunca é barrado: precisa gerenciar as assinaturas */}
+            {sessao.role === "admin" ? (
+              children
+            ) : (
+              <GuardaAssinatura estado={estado}>{children}</GuardaAssinatura>
+            )}
+          </div>
         </main>
       </div>
     </div>

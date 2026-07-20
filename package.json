@@ -9,7 +9,8 @@
     "lint": "eslint",
     "verifica:parsers": "tsx scripts/verifica-parsers.ts",
     "verifica:validacao": "tsx scripts/verifica-validacao.mts",
-    "verifica": "npm run verifica:parsers && npm run verifica:validacao"
+    "verifica:assinatura": "tsx scripts/verifica-assinatura.mts",
+    "verifica": "npm run verifica:parsers && npm run verifica:validacao && npm run verifica:assinatura"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",

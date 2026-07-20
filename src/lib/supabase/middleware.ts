@@ -58,5 +58,11 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // TODO(supabase): reforço server-side do bloqueio por inadimplência. Para o
+  // tenant (não-admin), chamar rpc('empresa_bloqueada', { p_empresa_id }) e, se
+  // verdadeiro, redirecionar toda rota que não comece com /assinatura para lá.
+  // O guarda no cliente (GuardaAssinatura) já cobre a experiência; este é o
+  // reforço que impede burlar via navegação direta.
+
   return response;
 }
