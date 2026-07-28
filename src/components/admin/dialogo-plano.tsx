@@ -10,7 +10,7 @@ import { Modal } from "@/components/ui/modal";
 import type { Plano } from "@/lib/types";
 
 const ESTADO_INICIAL: EstadoAdmin = {};
-
+/*  teste*/
 /** Cria (sem plano) ou edita (com plano). */
 export function DialogoPlano({ plano }: { plano?: Plano }) {
   const [aberto, setAberto] = useState(false);
