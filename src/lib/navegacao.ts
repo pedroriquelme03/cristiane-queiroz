@@ -45,6 +45,8 @@ export const NAVEGACAO: ItemNavegacao[] = [
   { href: "/admin", rotulo: "Visão geral", icone: ShieldCheck, grupo: "admin", papeis: ["admin"] },
   { href: "/admin/planos", rotulo: "Planos", icone: Layers, grupo: "admin", papeis: ["admin"] },
   { href: "/admin/assinaturas", rotulo: "Assinaturas dos clientes", icone: CreditCard, grupo: "admin", papeis: ["admin"] },
+  // ✅ Item "Empresas" adicionado dentro do array principal
+  { href: "/admin/empresas", rotulo: "Empresas", icone: Building2, grupo: "admin", papeis: ["admin"] },
 ];
 
 export const ROTULOS_GRUPO: Record<ItemNavegacao["grupo"], string> = {

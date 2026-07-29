@@ -9,6 +9,7 @@ const ABAS_ADMIN = [
   { href: "/admin", rotulo: "Visão geral" },
   { href: "/admin/planos", rotulo: "Planos" },
   { href: "/admin/assinaturas", rotulo: "Assinaturas dos clientes" },
+  { href: "/admin/empresas", rotulo: "Empresas" }, // ← ADICIONE ESTA LINHA
 ];
 
 /** Toda a área /admin é exclusiva do super admin (controle da plataforma). */
@@ -21,9 +22,9 @@ export default async function AdminLayout({ children }: { children: ReactNode })
   return (
     <div className="space-y-6">
       <CabecalhoPagina
-        titulo="Administração da plataforma"
-        descricao="Planos, assinaturas e faturamento dos clientes da consultoria"
-      />
+  titulo="Gestão da plataforma"
+  descricao="Planos, assinaturas, empresas e faturamento dos clientes"
+/>
       <Abas itens={ABAS_ADMIN} />
       {children}
     </div>

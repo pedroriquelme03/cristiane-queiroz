@@ -1,12 +1,8 @@
 /**
- * Sessão do usuário atual. Fronteira única: hoje devolve um mock; quando o
- * Supabase existir, lê o profile + empresa da sessão autenticada.
- *
- * Na demonstração o papel é 'admin' (super admin da CQ), para que o painel de
- * administração e todas as telas fiquem visíveis. Trocar para 'cliente' mostra
- * a plataforma na perspectiva do tenant.
+ * Sessão do usuário atual. Lê o perfil autenticado do Supabase.
+ * Se o perfil não existir, cria um automaticamente.
  */
-import { EMPRESA } from "@/lib/mock/gerador";
+import { createClient } from "@/lib/supabase/server";
 import type { Papel } from "@/lib/types";
 
 export interface Sessao {
@@ -18,17 +14,63 @@ export interface Sessao {
   empresaId: string;
 }
 
-const SESSAO_MOCK: Sessao = {
-  usuarioId: "user-cq",
-  nome: "Cristiane Queiroz",
-  email: "cristiane@cqconsultoria.com.br",
-  role: "admin",
-  empresaId: EMPRESA.id,
-};
-
 export async function getSessao(): Promise<Sessao> {
-  // TODO(supabase): ler profiles.role e a empresa ativa da sessão.
-  return SESSAO_MOCK;
+  const supabase = await createClient();
+
+  // 1. Obter usuário autenticado
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (userError || !user) {
+    throw new Error("Usuário não autenticado");
+  }
+
+  // 2. Tentar buscar o perfil
+  let { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("role, empresa_id")
+    .eq("id", user.id)
+    .single();
+
+  // 3. Se não existir, criar um perfil padrão
+  if (profileError || !profile) {
+    // Define o papel padrão como 'cliente'
+    const newProfile = {
+      id: user.id,
+      role: "cliente",
+      empresa_id: "jota", // valor fixo para testes – ajuste conforme necessário
+    };
+
+    // Tenta inserir
+    const { data: inserted, error: insertError } = await supabase
+      .from("profiles")
+      .insert(newProfile)
+      .select("role, empresa_id")
+      .single();
+
+    if (insertError || !inserted) {
+      // Se falhar (ex: coluna empresa_id não existe), tenta sem ela
+      const { data: inserted2, error: insertError2 } = await supabase
+        .from("profiles")
+        .insert({ id: user.id, role: "cliente" })
+        .select("role, empresa_id")
+        .single();
+
+      if (insertError2 || !inserted2) {
+        throw new Error("Não foi possível criar o perfil");
+      }
+      profile = inserted2;
+    } else {
+      profile = inserted;
+    }
+  }
+
+  // 4. Retornar a sessão
+  return {
+    usuarioId: user.id,
+    nome: user.user_metadata?.nome || user.email || "Usuário",
+    email: user.email!,
+    role: profile.role as Papel,
+    empresaId: profile.empresa_id || "jota", // fallback
+  };
 }
 
 export function ehAdmin(sessao: Sessao) {
