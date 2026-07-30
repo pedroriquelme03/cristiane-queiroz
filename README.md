@@ -17,22 +17,29 @@ movimento. O banco ainda não foi provisionado.
 
 | Tela | Estado |
 |---|---|
-| Dashboard executivo | Pronta |
-| Empresa (dados gerais, estrutura) | Pronta |
-| Financeiro (fluxo, a pagar, a receber, DRE, orçamento) | Pronta |
+| Dashboard executivo | Pronta; agora aceita contexto de empresa/cliente para visão administrativa |
+| Visão do cliente | Pronta; admin seleciona cliente e visualiza dashboard/dados no contexto dele |
+| Empresa — dados gerais | Pronta; integrada à estrutura multiempresa |
+| Empresa — estrutura | Pronta; exibe unidades, filiais, áreas e cargos por empresa |
+| Financeiro — fluxo, contas, DRE e orçamento | Pronta |
 | Indicadores | Pronta |
 | Plano de ação | Pronta |
 | Diagnóstico empresarial | Pronta |
 | Maturidade empresarial | Pronta |
-| Documentos | Listagem pronta; download depende do Storage |
+| Documentos | Listagem pronta; download ainda depende do Storage |
 | Reuniões e treinamentos | Pronta |
-| Login e perfis de acesso | Tela e ações prontas; autenticam quando houver banco |
-| Importação de planilha | Assistente completo; grava quando houver banco |
-| Lançamento manual | Formulários completos; gravam quando houver banco |
-| Assinatura do cliente | Plano, faturas, pagamento (PIX de demonstração) e troca de plano |
-| Super admin — planos | CRUD de planos que aparecem na vitrine do cliente |
-| Super admin — assinaturas | Carteira de tenants: pagamento, troca de plano, bloqueio |
-| Bloqueio por inadimplência | Ativo: trava o tenant após a carência, deixando só a assinatura |
+| Login e perfis de acesso | Tela e ações prontas; autenticação real iniciada via Supabase/Auth |
+| Importação de planilha | Assistente completo; grava quando houver banco conectado |
+| Lançamento manual | Formulários completos; gravam quando houver banco conectado |
+| Assinatura do cliente | Plano, faturas, pagamento PIX de demonstração e troca de plano |
+| Bloqueio por inadimplência | Ativo; trava o tenant após carência, deixando acesso apenas à assinatura |
+| Super admin — resumo | Pronta; visão geral de MRR, clientes ativos, atrasos e bloqueios |
+| Super admin — usuários/empresas | Pronta; CRUD de empresas/clientes e gestão de acessos |
+| Super admin — estrutura da empresa | Pronta; admin gerencia unidades, áreas e cargos por cliente |
+| Super admin — planos | Pronta; CRUD de planos exibidos na vitrine do cliente |
+| Super admin — assinaturas | Pronta; carteira de tenants com pagamento, troca de plano e bloqueio |
+| Multiempresa / vínculos | Estrutura criada; vínculos empresa–membros adicionados nas migrations |
+| Banco Supabase | Schema avançado com migrations até estrutura multiempresa; depende de provisionamento/aplicação no projeto real |
 
 ## Como rodar
 
