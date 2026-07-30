@@ -8,9 +8,10 @@ export default function NovaEmpresaPage() {
 
   return (
     <div className="max-w-xl">
-      <h2 className="text-xl font-semibold mb-4">Nova empresa</h2>
+      <h2 className="text-xl font-semibold mb-4">Novo usuário</h2>
       <form action={action} className="space-y-4">
-        <div>
+        <div className="border-t pt-4">
+          <h3 className="text-sm font-medium mb-2">Dados da empresa</h3>
           <label htmlFor="razao_social" className="block text-sm font-medium mb-1">
             Razão Social *
           </label>
@@ -43,7 +44,14 @@ export default function NovaEmpresaPage() {
             name="cnpj"
             type="text"
             required
-            placeholder="00.000.000/0000-00"
+            inputMode="numeric"
+            minLength={14}
+            maxLength={14}
+            pattern="[0-9]{14}"
+            placeholder="Somente os 14 números"
+            onInput={(event) => {
+              event.currentTarget.value = event.currentTarget.value.replace(/\D/g, "").slice(0, 14);
+            }}
             className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-brand focus:outline-none"
           />
         </div>
@@ -105,7 +113,7 @@ export default function NovaEmpresaPage() {
           type="submit"
           className="px-4 py-2 bg-brand text-brand-foreground rounded-lg hover:opacity-90"
         >
-          Criar empresa
+          Criar usuário
         </button>
       </form>
     </div>

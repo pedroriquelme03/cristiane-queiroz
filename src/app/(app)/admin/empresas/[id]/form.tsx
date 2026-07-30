@@ -4,7 +4,15 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient as createBrowserClient } from "@/lib/supabase/client";
 
-export function FormEditarEmpresa({ empresa }: { empresa: any }) {
+interface EmpresaForm {
+  id: string;
+  razao_social: string;
+  nome_fantasia: string;
+  cnpj: string;
+  segmento: string;
+}
+
+export function FormEditarEmpresa({ empresa }: { empresa: EmpresaForm }) {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -15,10 +23,17 @@ export function FormEditarEmpresa({ empresa }: { empresa: any }) {
     setError(null);
 
     const formData = new FormData(event.currentTarget);
+    const cnpj = String(formData.get("cnpj") ?? "").replace(/\D/g, "");
+    if (!/^\d{14}$/.test(cnpj)) {
+      setError("O CNPJ deve conter exatamente 14 números.");
+      setSaving(false);
+      return;
+    }
+
     const dados = {
       razao_social: formData.get("razao_social") as string,
       nome_fantasia: formData.get("nome_fantasia") as string,
-      cnpj: formData.get("cnpj") as string,
+      cnpj,
       segmento: formData.get("segmento") as string,
     };
 
@@ -71,11 +86,18 @@ export function FormEditarEmpresa({ empresa }: { empresa: any }) {
         </label>
         <input
           id="cnpj"
-          name="cnpj"
-          type="text"
-          defaultValue={empresa.cnpj}
-          required
-          placeholder="00.000.000/0000-00"
+            name="cnpj"
+            type="text"
+            defaultValue={empresa.cnpj}
+            required
+            inputMode="numeric"
+            minLength={14}
+            maxLength={14}
+            pattern="[0-9]{14}"
+            placeholder="Somente os 14 números"
+            onInput={(event) => {
+              event.currentTarget.value = event.currentTarget.value.replace(/\D/g, "").slice(0, 14);
+            }}
           className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-brand focus:outline-none"
         />
       </div>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import {
   AlertTriangle,
+  ArrowRight,
   ArrowDownCircle,
   ArrowUpCircle,
   Info,
@@ -53,7 +54,7 @@ const COR_ALERTA = {
   info: "mt-0.5 size-4 shrink-0 text-brand",
 } as const;
 
-export default async function DashboardPage() {
+export default async function DashboardPage({ empresaId }: { empresaId?: string }) {
   const competencia = await getCompetenciaAtual();
   const [kpis, projecao, indicadores, acoes, alertas] = await Promise.all([
     getKpis(competencia),
@@ -69,6 +70,33 @@ export default async function DashboardPage() {
     (menor, p) => (p.saldoProjetado < menor.saldoProjetado ? p : menor),
     projecao[0],
   );
+  const sufixoEmpresa = empresaId ? `?empresa=${encodeURIComponent(empresaId)}` : "";
+  const prioridades = [
+    kpis.contasPagarVencidas > 0
+      ? {
+          titulo: "Regularizar contas vencidas",
+          descricao: `${moeda(kpis.contasPagarVencidas)} em pagamentos atrasados podem gerar juros e interromper serviços.`,
+          href: `/financeiro/contas-a-pagar${sufixoEmpresa}`,
+          acao: "Ver contas a pagar",
+        }
+      : null,
+    kpis.inadimplencia > 0
+      ? {
+          titulo: "Cobrar valores em atraso",
+          descricao: `${moeda(kpis.inadimplencia)} em recebimentos pendentes merece acompanhamento imediato.`,
+          href: `/financeiro/contas-a-receber${sufixoEmpresa}`,
+          acao: "Ver contas a receber",
+        }
+      : null,
+    menorSaldoProjetado.saldoProjetado < 0
+      ? {
+          titulo: "Revisar o caixa projetado",
+          descricao: `O saldo previsto chega a ${moeda(menorSaldoProjetado.saldoProjetado)} em ${formatarData(menorSaldoProjetado.data)}.`,
+          href: `/financeiro/fluxo-de-caixa${sufixoEmpresa}`,
+          acao: "Abrir fluxo de caixa",
+        }
+      : null,
+  ].filter((prioridade): prioridade is NonNullable<typeof prioridade> => prioridade !== null);
 
   return (
     <>
@@ -129,6 +157,44 @@ export default async function DashboardPage() {
         />
       </div>
 
+      <Card className="border-warning/30">
+        <CardHeader
+          titulo="Prioridades financeiras"
+          descricao={
+            prioridades.length
+              ? "Ações que merecem atenção agora."
+              : "Nenhuma pendência financeira crítica identificada para este período."
+          }
+        />
+        {prioridades.length ? (
+          <CardBody className="grid gap-3 lg:grid-cols-3">
+            {prioridades.map((prioridade) => (
+              <article
+                key={prioridade.titulo}
+                className="flex flex-col justify-between gap-3 rounded-lg border border-border bg-surface-muted/50 p-3"
+              >
+                <div className="flex gap-2.5">
+                  <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />
+                  <div>
+                    <p className="text-sm font-medium">{prioridade.titulo}</p>
+                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                      {prioridade.descricao}
+                    </p>
+                  </div>
+                </div>
+                <Link
+                  href={prioridade.href}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-brand hover:underline"
+                >
+                  {prioridade.acao}
+                  <ArrowRight className="size-3.5" aria-hidden />
+                </Link>
+              </article>
+            ))}
+          </CardBody>
+        ) : null}
+      </Card>
+
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader
@@ -136,7 +202,7 @@ export default async function DashboardPage() {
             descricao="Saldo atual acrescido dos títulos em aberto, pelos próximos 90 dias"
             acao={
               <Link
-                href="/financeiro/fluxo-de-caixa"
+                href={`/financeiro/fluxo-de-caixa${sufixoEmpresa}`}
                 className="text-xs font-medium text-brand hover:underline"
               >
                 Ver detalhe
@@ -192,7 +258,7 @@ export default async function DashboardPage() {
             descricao="Últimos 12 meses"
             acao={
               <Link
-                href="/indicadores"
+                href={`/indicadores${sufixoEmpresa}`}
                 className="text-xs font-medium text-brand hover:underline"
               >
                 Ver todos
@@ -270,7 +336,7 @@ export default async function DashboardPage() {
             descricao={`${concluidas} de ${acoes.length} ações já concluídas`}
             acao={
               <Link
-                href="/plano-de-acao"
+                href={`/plano-de-acao${sufixoEmpresa}`}
                 className="text-xs font-medium text-brand hover:underline"
               >
                 Ver plano

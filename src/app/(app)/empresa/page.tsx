@@ -1,3 +1,7 @@
+import Link from "next/link";
+import { FilePenLine } from "lucide-react";
+
+import { SeletorCliente } from "@/app/(app)/admin/visao-cliente/seletor-cliente";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { cnpj as formatarCnpj, data as formatarData } from "@/lib/format";
 import { getSessao } from "@/lib/sessao";
@@ -29,28 +33,74 @@ function getNomeRegime(valor: string): string {
   return NOME_REGIME[valor as RegimeTributario] ?? valor;
 }
 
-export default async function EmpresaPage() {
+export default async function EmpresaPage({
+  searchParams,
+}: PageProps<"/empresa">) {
   const sessao = await getSessao();
   const supabase = await createClient();
+  const { empresa: empresaParam } = await searchParams;
+  const empresaSelecionadaId =
+    sessao.role === "admin" && typeof empresaParam === "string"
+      ? empresaParam
+      : sessao.empresaId;
 
-  const { data: empresa, error } = await supabase
+  const { data: empresas, error: empresasError } = await supabase
     .from("empresas")
     .select("*")
-    .eq("id", sessao.empresaId)
-    .single();
+    .order("razao_social");
 
-  if (error || !empresa) {
+  const empresa = (empresas ?? []).find((item) => item.id === empresaSelecionadaId);
+
+  if (empresasError) {
     return (
       <div className="p-8 text-center text-muted-foreground">
-        Empresa não encontrada. Entre em contato com o suporte.
+        Não foi possível carregar as empresas. Tente novamente mais tarde.
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
+      {sessao.role === "admin" ? (
+        <Card>
+          <CardHeader
+            titulo="Cliente visualizado"
+            descricao="Escolha a empresa cujos dados cadastrais e estruturais deseja consultar."
+          />
+          <CardBody className="max-w-xl">
+            <SeletorCliente
+              empresas={empresas ?? []}
+              empresaSelecionadaId={empresa?.id}
+              rotaBase="/empresa"
+            />
+          </CardBody>
+        </Card>
+      ) : null}
+
+      {!empresa ? (
+        <Card>
+          <CardBody className="py-12 text-center text-sm text-muted-foreground">
+            {sessao.role === "admin"
+              ? "Selecione um cliente para consultar os dados da empresa."
+              : "Sua conta ainda não está vinculada a uma empresa. Entre em contato com a consultoria."}
+          </CardBody>
+        </Card>
+      ) : (
       <Card>
-        <CardHeader titulo="Dados gerais" />
+        <CardHeader
+          titulo="Dados gerais"
+          acao={
+            sessao.role === "admin" ? (
+              <Link
+                href={`/admin/empresas/${empresa.id}`}
+                className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-xs font-medium hover:bg-surface-muted"
+              >
+                <FilePenLine className="size-4" />
+                Editar cadastro
+              </Link>
+            ) : null
+          }
+        />
         <CardBody className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
@@ -84,14 +134,15 @@ export default async function EmpresaPage() {
           </div>
         </CardBody>
       </Card>
+      )}
 
       {/* Se houver unidades, exibir aqui */}
-      {empresa.unidades && empresa.unidades.length > 0 && (
+      {empresa?.unidades && empresa.unidades.length > 0 && (
         <Card>
           <CardHeader titulo="Estrutura" />
           <CardBody>
             <ul className="space-y-2">
-              {empresa.unidades.map((unidade: any) => (
+              {empresa.unidades.map((unidade: { id: string; nome: string; tipo: string; cidade: string; uf: string }) => (
                 <li key={unidade.id} className="flex items-center gap-2 border-b last:border-0 py-2">
                   <span className="font-medium">{unidade.nome}</span>
                   <span className="text-sm text-muted-foreground">

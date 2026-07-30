@@ -1,4 +1,5 @@
 import { GraficoEvolucaoMaturidade } from "@/components/graficos/grafico-evolucao-maturidade";
+import { SeletorEmpresaAdmin } from "@/components/admin/seletor-empresa-admin";
 import { Badge } from "@/components/ui/badge";
 import { CabecalhoPagina } from "@/components/ui/cabecalho-pagina";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
@@ -45,8 +46,14 @@ function tomKpi(pontuacao: number) {
   return t === "marca" ? ("neutro" as const) : t;
 }
 
-export default async function MaturidadePage() {
-  const avaliacoes = await getMaturidade();
+export default async function MaturidadePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ empresa?: string | string[] }>;
+}) {
+  const { empresa: empresaParam } = await searchParams;
+  const empresaId = typeof empresaParam === "string" ? empresaParam : undefined;
+  const avaliacoes = await getMaturidade(empresaId);
   const atual = avaliacoes[avaliacoes.length - 1];
   const inicial = avaliacoes[0];
   const anterior = avaliacoes[avaliacoes.length - 2] ?? inicial;
@@ -69,6 +76,7 @@ export default async function MaturidadePage() {
       <CabecalhoPagina
         titulo="Maturidade empresarial"
         descricao={`Pontuação de 0 a 100 por área — leitura de ${competenciaExtenso(atual.competencia)}`}
+        acao={<SeletorEmpresaAdmin />}
       />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

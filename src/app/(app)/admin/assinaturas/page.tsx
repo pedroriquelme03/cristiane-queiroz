@@ -16,7 +16,7 @@ export default async function AdminAssinaturasPage() {
   return (
     <Card>
       <CardHeader
-        titulo="Assinaturas dos clientes"
+        titulo="Assinaturas"
         descricao={`${tenants.length} clientes · registre pagamentos, troque planos e controle o acesso`}
       />
       <CardBody className="px-0 py-0">

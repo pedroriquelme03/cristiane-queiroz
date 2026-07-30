@@ -6,10 +6,11 @@ import {
   FileText,
   Gauge,
   LayoutDashboard,
-  Layers,
+  ListChecks,
   ShieldCheck,
   Stethoscope,
   TrendingUp,
+  Users,
   Wallet,
   type LucideIcon,
 } from "lucide-react";
@@ -26,7 +27,8 @@ export interface ItemNavegacao {
 }
 
 export const NAVEGACAO: ItemNavegacao[] = [
-  { href: "/", rotulo: "Dashboard", icone: LayoutDashboard, grupo: "visao" },
+  { href: "/", rotulo: "Dashboard", icone: LayoutDashboard, grupo: "visao", papeis: ["cliente", "consultor"] },
+  { href: "/visao-cliente", rotulo: "Visão do cliente", icone: LayoutDashboard, grupo: "visao", papeis: ["admin"] },
   { href: "/empresa", rotulo: "Empresa", icone: Building2, grupo: "visao" },
 
   { href: "/financeiro", rotulo: "Financeiro", icone: Wallet, grupo: "gestao" },
@@ -39,14 +41,13 @@ export const NAVEGACAO: ItemNavegacao[] = [
   { href: "/reunioes", rotulo: "Reuniões e treinamentos", icone: CalendarCheck, grupo: "consultoria" },
 
   // Assinatura do próprio tenant: dono e gestor da empresa
-  { href: "/assinatura", rotulo: "Assinatura", icone: CreditCard, grupo: "conta", papeis: ["admin", "cliente"] },
+  { href: "/assinatura", rotulo: "Assinatura", icone: CreditCard, grupo: "conta", papeis: ["cliente"] },
 
-  // Painel do super admin (controle da plataforma)
-  { href: "/admin", rotulo: "Visão geral", icone: ShieldCheck, grupo: "admin", papeis: ["admin"] },
-  { href: "/admin/planos", rotulo: "Planos", icone: Layers, grupo: "admin", papeis: ["admin"] },
-  { href: "/admin/assinaturas", rotulo: "Assinaturas dos clientes", icone: CreditCard, grupo: "admin", papeis: ["admin"] },
-  // ✅ Item "Empresas" adicionado dentro do array principal
-  { href: "/admin/empresas", rotulo: "Empresas", icone: Building2, grupo: "admin", papeis: ["admin"] },
+  // Gestão do super admin, separada por área.
+  { href: "/admin/gestao", rotulo: "Resumo", icone: ShieldCheck, grupo: "admin", papeis: ["admin"] },
+  { href: "/admin/empresas", rotulo: "Usuários", icone: Users, grupo: "admin", papeis: ["admin"] },
+  { href: "/admin/planos", rotulo: "Planos", icone: ListChecks, grupo: "admin", papeis: ["admin"] },
+  { href: "/admin/assinaturas", rotulo: "Assinaturas", icone: CreditCard, grupo: "admin", papeis: ["admin"] },
 ];
 
 export const ROTULOS_GRUPO: Record<ItemNavegacao["grupo"], string> = {

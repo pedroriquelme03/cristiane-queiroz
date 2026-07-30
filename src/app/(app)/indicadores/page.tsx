@@ -1,18 +1,29 @@
 import { GraficoIndicador } from "@/components/graficos/grafico-indicador";
+import { SeletorEmpresaAdmin } from "@/components/admin/seletor-empresa-admin";
 import { Badge } from "@/components/ui/badge";
 import { CabecalhoPagina } from "@/components/ui/cabecalho-pagina";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { getEmpresa, getIndicadores } from "@/lib/dados";
 import { percentual, valorIndicador } from "@/lib/format";
 
-export default async function IndicadoresPage() {
-  const [indicadores, empresa] = await Promise.all([getIndicadores(), getEmpresa()]);
+export default async function IndicadoresPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ empresa?: string | string[] }>;
+}) {
+  const { empresa: empresaParam } = await searchParams;
+  const empresaId = typeof empresaParam === "string" ? empresaParam : undefined;
+  const [indicadores, empresa] = await Promise.all([
+    getIndicadores(empresaId),
+    getEmpresa(empresaId),
+  ]);
 
   return (
     <>
       <CabecalhoPagina
         titulo="Indicadores"
         descricao={`Painel de ${indicadores.length} indicadores, personalizados para o segmento de ${empresa.segmento}`}
+        acao={<SeletorEmpresaAdmin />}
       />
 
       <div className="grid gap-6 xl:grid-cols-2">

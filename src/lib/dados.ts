@@ -65,7 +65,8 @@ const saldo = (t: Titulo) => t.valor - t.valorPago;
 // Empresa e cadastros
 // ---------------------------------------------------------------------------
 
-export async function getEmpresa(): Promise<Empresa> {
+export async function getEmpresa(_empresaId?: string): Promise<Empresa> {
+  void _empresaId;
   return EMPRESA;
 }
 
@@ -203,27 +204,33 @@ export async function getDre(
 // Indicadores e consultoria
 // ---------------------------------------------------------------------------
 
-export async function getIndicadores(): Promise<Indicador[]> {
+export async function getIndicadores(_empresaId?: string): Promise<Indicador[]> {
+  void _empresaId;
   return INDICADORES;
 }
 
-export async function getPlanosAcao(): Promise<PlanoAcao[]> {
+export async function getPlanosAcao(_empresaId?: string): Promise<PlanoAcao[]> {
+  void _empresaId;
   return PLANOS_ACAO;
 }
 
-export async function getDiagnosticos(): Promise<Diagnostico[]> {
+export async function getDiagnosticos(_empresaId?: string): Promise<Diagnostico[]> {
+  void _empresaId;
   return DIAGNOSTICOS;
 }
 
-export async function getMaturidade(): Promise<AvaliacaoMaturidade[]> {
+export async function getMaturidade(_empresaId?: string): Promise<AvaliacaoMaturidade[]> {
+  void _empresaId;
   return MATURIDADE;
 }
 
-export async function getDocumentos(): Promise<Documento[]> {
+export async function getDocumentos(_empresaId?: string): Promise<Documento[]> {
+  void _empresaId;
   return DOCUMENTOS;
 }
 
-export async function getReunioes(): Promise<Reuniao[]> {
+export async function getReunioes(_empresaId?: string): Promise<Reuniao[]> {
+  void _empresaId;
   return [...REUNIOES].sort((a, b) => b.data.localeCompare(a.data));
 }
 

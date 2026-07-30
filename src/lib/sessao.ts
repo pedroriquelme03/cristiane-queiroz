@@ -1,6 +1,6 @@
 /**
- * Sessão do usuário atual. Lê o perfil autenticado do Supabase.
- * Se o perfil não existir, cria um automaticamente.
+ * Sessão do usuário atual. A empresa ativa vem de empresa_membros, que é a
+ * fonte de verdade do vínculo entre usuários e clientes.
  */
 import { createClient } from "@/lib/supabase/server";
 import type { Papel } from "@/lib/types";
@@ -10,7 +10,7 @@ export interface Sessao {
   nome: string;
   email: string;
   role: Papel;
-  /** Empresa (tenant) que a sessão está visualizando. */
+  /** Empresa (tenant) vinculada ao usuário. Vazio somente enquanto o vínculo não foi criado. */
   empresaId: string;
 }
 
@@ -23,45 +23,34 @@ export async function getSessao(): Promise<Sessao> {
     throw new Error("Usuário não autenticado");
   }
 
-  // 2. Tentar buscar o perfil
-  let { data: profile, error: profileError } = await supabase
+  // 2. Buscar o perfil. O trigger do banco normalmente já o cria no signup.
+  const { data: profileExistente, error: profileError } = await supabase
     .from("profiles")
-    .select("role, empresa_id")
+    .select("role")
     .eq("id", user.id)
     .single();
 
-  // 3. Se não existir, criar um perfil padrão
+  // 3. Se não existir, criar um perfil padrão sem empresa fictícia.
+  let profile = profileExistente;
   if (profileError || !profile) {
-    // Define o papel padrão como 'cliente'
-    const newProfile = {
-      id: user.id,
-      role: "cliente",
-      empresa_id: "jota", // valor fixo para testes – ajuste conforme necessário
-    };
-
-    // Tenta inserir
     const { data: inserted, error: insertError } = await supabase
       .from("profiles")
-      .insert(newProfile)
-      .select("role, empresa_id")
+      .insert({ id: user.id, role: "cliente" })
+      .select("role")
       .single();
 
     if (insertError || !inserted) {
-      // Se falhar (ex: coluna empresa_id não existe), tenta sem ela
-      const { data: inserted2, error: insertError2 } = await supabase
-        .from("profiles")
-        .insert({ id: user.id, role: "cliente" })
-        .select("role, empresa_id")
-        .single();
-
-      if (insertError2 || !inserted2) {
-        throw new Error("Não foi possível criar o perfil");
-      }
-      profile = inserted2;
-    } else {
-      profile = inserted;
+      throw new Error("Não foi possível criar o perfil");
     }
+    profile = inserted;
   }
+
+  const { data: vinculo } = await supabase
+    .from("empresa_membros")
+    .select("empresa_id")
+    .eq("user_id", user.id)
+    .limit(1)
+    .maybeSingle();
 
   // 4. Retornar a sessão
   return {
@@ -69,7 +58,7 @@ export async function getSessao(): Promise<Sessao> {
     nome: user.user_metadata?.nome || user.email || "Usuário",
     email: user.email!,
     role: profile.role as Papel,
-    empresaId: profile.empresa_id || "jota", // fallback
+    empresaId: vinculo?.empresa_id ?? "",
   };
 }
 
