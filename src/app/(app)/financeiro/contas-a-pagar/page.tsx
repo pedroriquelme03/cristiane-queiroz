@@ -5,10 +5,16 @@ import { Kpi } from "@/components/ui/kpi";
 import { getPlanoContas, getTitulos, statusEfetivo } from "@/lib/dados";
 import { diasAte, moeda } from "@/lib/format";
 
-export default async function ContasAPagarPage() {
+export default async function ContasAPagarPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ empresa?: string | string[] }>;
+}) {
+  const { empresa } = await searchParams;
+  const empresaId = typeof empresa === "string" ? empresa : undefined;
   const [titulos, contas] = await Promise.all([
-    getTitulos("pagar"),
-    getPlanoContas(),
+    getTitulos("pagar", empresaId),
+    getPlanoContas(empresaId),
   ]);
 
   const abertos = titulos.filter((t) => statusEfetivo(t) === "aberto");

@@ -57,19 +57,21 @@ const COR_ALERTA = {
 export default async function DashboardPage({ empresaId }: { empresaId?: string }) {
   const competencia = await getCompetenciaAtual();
   const [kpis, projecao, indicadores, acoes, alertas] = await Promise.all([
-    getKpis(competencia),
-    getFluxoProjetado(90),
-    getIndicadores(),
-    getPlanosAcao(),
-    getAlertas(),
+    getKpis(competencia, empresaId),
+    getFluxoProjetado(90, empresaId),
+    getIndicadores(empresaId),
+    getPlanosAcao(empresaId),
+    getAlertas(empresaId),
   ]);
 
   const acoesAtivas = acoes.filter((a) => a.status === "em_andamento");
   const concluidas = acoes.filter((a) => a.status === "concluido").length;
-  const menorSaldoProjetado = projecao.reduce(
-    (menor, p) => (p.saldoProjetado < menor.saldoProjetado ? p : menor),
-    projecao[0],
-  );
+  const menorSaldoProjetado = projecao.length
+    ? projecao.reduce(
+        (menor, p) => (p.saldoProjetado < menor.saldoProjetado ? p : menor),
+        projecao[0],
+      )
+    : null;
   const sufixoEmpresa = empresaId ? `?empresa=${encodeURIComponent(empresaId)}` : "";
   const prioridades = [
     kpis.contasPagarVencidas > 0
@@ -88,7 +90,7 @@ export default async function DashboardPage({ empresaId }: { empresaId?: string 
           acao: "Ver contas a receber",
         }
       : null,
-    menorSaldoProjetado.saldoProjetado < 0
+    menorSaldoProjetado && menorSaldoProjetado.saldoProjetado < 0
       ? {
           titulo: "Revisar o caixa projetado",
           descricao: `O saldo previsto chega a ${moeda(menorSaldoProjetado.saldoProjetado)} em ${formatarData(menorSaldoProjetado.data)}.`,
@@ -213,16 +215,22 @@ export default async function DashboardPage({ empresaId }: { empresaId?: string 
             <GraficoSaldo pontos={projecao} chave="saldoProjetado" />
             <p className="mt-3 text-xs text-muted-foreground">
               Menor saldo previsto:{" "}
-              <strong
-                className={
-                  menorSaldoProjetado.saldoProjetado < 0
-                    ? "font-medium text-negative"
-                    : "font-medium text-foreground"
-                }
-              >
-                {moeda(menorSaldoProjetado.saldoProjetado)}
-              </strong>{" "}
-              em {formatarData(menorSaldoProjetado.data)}
+              {menorSaldoProjetado ? (
+                <>
+                  <strong
+                    className={
+                      menorSaldoProjetado.saldoProjetado < 0
+                        ? "font-medium text-negative"
+                        : "font-medium text-foreground"
+                    }
+                  >
+                    {moeda(menorSaldoProjetado.saldoProjetado)}
+                  </strong>{" "}
+                  em {formatarData(menorSaldoProjetado.data)}
+                </>
+              ) : (
+                "sem projeção cadastrada"
+              )}
             </p>
           </CardBody>
         </Card>
@@ -289,9 +297,9 @@ export default async function DashboardPage({ empresaId }: { empresaId?: string 
               <tbody>
                 {indicadores.slice(0, 6).map((indicador) => {
                   const serie = indicador.valores;
-                  const primeiro = serie[0].valor;
-                  const atual = serie[serie.length - 1].valor;
-                  const variacao = ((atual - primeiro) / Math.abs(primeiro)) * 100;
+                  const primeiro = serie[0]?.valor ?? 0;
+                  const atual = serie[serie.length - 1]?.valor ?? 0;
+                  const variacao = primeiro !== 0 ? ((atual - primeiro) / Math.abs(primeiro)) * 100 : 0;
                   const favoravel =
                     indicador.direcaoMeta === "maior_melhor"
                       ? atual > primeiro

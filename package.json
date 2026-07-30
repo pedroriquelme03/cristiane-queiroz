@@ -10,7 +10,8 @@
     "verifica:parsers": "tsx scripts/verifica-parsers.ts",
     "verifica:validacao": "tsx scripts/verifica-validacao.mts",
     "verifica:assinatura": "tsx scripts/verifica-assinatura.mts",
-    "verifica": "npm run verifica:parsers && npm run verifica:validacao && npm run verifica:assinatura"
+    "verifica": "npm run verifica:parsers && npm run verifica:validacao && npm run verifica:assinatura",
+    "seed:supabase": "tsx scripts/seed-supabase.mts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",

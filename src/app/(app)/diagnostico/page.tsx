@@ -35,6 +35,24 @@ export default async function DiagnosticoPage({
   const { empresa: empresaParam } = await searchParams;
   const empresaId = typeof empresaParam === "string" ? empresaParam : undefined;
   const diagnosticos = await getDiagnosticos(empresaId);
+
+  if (diagnosticos.length === 0) {
+    return (
+      <>
+        <CabecalhoPagina
+          titulo="Diagnóstico empresarial"
+          descricao="Avaliação por área"
+          acao={<SeletorEmpresaAdmin />}
+        />
+        <Card>
+          <CardBody className="px-5 py-10 text-center text-sm text-muted-foreground">
+            Nenhum diagnóstico cadastrado para esta empresa.
+          </CardBody>
+        </Card>
+      </>
+    );
+  }
+
   const inicial = diagnosticos[0];
   const atual = diagnosticos[diagnosticos.length - 1];
 

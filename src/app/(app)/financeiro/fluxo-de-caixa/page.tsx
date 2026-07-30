@@ -13,15 +13,21 @@ import {
 } from "@/lib/dados";
 import { competenciaExtenso, data as formatarData, moeda } from "@/lib/format";
 
-export default async function FluxoDeCaixaPage() {
+export default async function FluxoDeCaixaPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ empresa?: string | string[] }>;
+}) {
+  const { empresa } = await searchParams;
+  const empresaId = typeof empresa === "string" ? empresa : undefined;
   const competencia = await getCompetenciaAtual();
   const { inicio, fim } = intervaloDoMes(competencia);
 
   const [fluxo, projecao, lancamentos, contas] = await Promise.all([
-    getFluxoDiario(inicio, fim),
-    getFluxoProjetado(90),
-    getLancamentos(inicio, fim),
-    getPlanoContas(),
+    getFluxoDiario(inicio, fim, empresaId),
+    getFluxoProjetado(90, empresaId),
+    getLancamentos(inicio, fim, empresaId),
+    getPlanoContas(empresaId),
   ]);
 
   const nomeConta = (id: string | null) =>

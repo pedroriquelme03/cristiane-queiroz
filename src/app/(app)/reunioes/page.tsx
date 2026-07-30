@@ -1,6 +1,5 @@
 import { GraduationCap, Users, Video } from "lucide-react";
 
-import { SeletorEmpresaAdmin } from "@/components/admin/seletor-empresa-admin";
 import { Badge } from "@/components/ui/badge";
 import { CabecalhoPagina } from "@/components/ui/cabecalho-pagina";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
@@ -17,14 +16,8 @@ function formatarDataHora(iso: string) {
   });
 }
 
-export default async function ReunioesPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ empresa?: string | string[] }>;
-}) {
-  const { empresa: empresaParam } = await searchParams;
-  const empresaId = typeof empresaParam === "string" ? empresaParam : undefined;
-  const registros = await getReunioes(empresaId);
+export default async function ReunioesPage() {
+  const registros = await getReunioes();
 
   const reunioes = registros.filter((r) => r.tipo === "reuniao");
   const treinamentos = registros.filter((r) => r.tipo === "treinamento");
@@ -35,7 +28,6 @@ export default async function ReunioesPage({
       <CabecalhoPagina
         titulo="Reuniões e treinamentos"
         descricao="Histórico de encontros, atas e materiais de apoio"
-        acao={<SeletorEmpresaAdmin />}
       />
 
       <div className="grid gap-3 sm:grid-cols-3">
@@ -79,6 +71,9 @@ export default async function ReunioesPage({
                   <article className="min-w-0 flex-1 pb-1">
                     <header className="flex flex-wrap items-center gap-2">
                       <h3 className="text-sm font-medium">{registro.titulo}</h3>
+                      {registro.empresaNome ? (
+                        <Badge tom="neutro">{registro.empresaNome}</Badge>
+                      ) : null}
                       <Badge tom={registro.tipo === "treinamento" ? "marca" : "neutro"}>
                         {registro.tipo === "treinamento" ? "Treinamento" : "Reunião"}
                       </Badge>

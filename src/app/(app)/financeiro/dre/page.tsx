@@ -56,10 +56,16 @@ const ESTRUTURA: (
   },
 ];
 
-export default async function DrePage() {
+export default async function DrePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ empresa?: string | string[] }>;
+}) {
+  const { empresa } = await searchParams;
+  const empresaId = typeof empresa === "string" ? empresa : undefined;
   const competencia = await getCompetenciaAtual();
   const { inicio, fim } = intervaloDoMes(competencia);
-  const linhas = await getDre(inicio, fim);
+  const linhas = await getDre(inicio, fim, empresaId);
 
   const porGrupo = (grupo: GrupoDre) =>
     linhas.filter((l) => l.grupoDre === grupo && (l.realizado !== 0 || l.previsto !== 0));

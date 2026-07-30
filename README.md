@@ -97,7 +97,6 @@ src/
     dados.ts           fronteira com a fonte de dados
     types.ts           modelo de domínio (espelha o schema)
     format.ts          moeda, percentual, datas em pt-BR
-    mock/gerador.ts    dataset de demonstração (determinístico)
 supabase/migrations/   schema, RLS e funções de agregação
 ```
 
