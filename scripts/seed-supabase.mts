@@ -35,6 +35,13 @@ interface PlanoContaSeed {
   grupo_dre: GrupoDre;
 }
 
+interface PlanoSeedSalvo {
+  id: string;
+  nome: string;
+  preco_mensal: number | string;
+  preco_anual: number | string | null;
+}
+
 loadEnvLocal();
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -76,7 +83,7 @@ async function main() {
 
   for (const [index, empresa] of empresas.entries()) {
     const plano = planos[index % planos.length];
-    await seedEmpresa(empresa, plano.id, index);
+    await seedEmpresa(empresa, plano, index);
   }
 
   console.log(`Seed concluido para ${empresas.length} empresa(s).`);
@@ -113,7 +120,7 @@ async function listarOuCriarEmpresas(): Promise<EmpresaSeed[]> {
   return [criada as EmpresaSeed];
 }
 
-async function garantirPlanos() {
+async function garantirPlanos(): Promise<PlanoSeedSalvo[]> {
   const sementes = [
     {
       nome: "Essencial",
@@ -184,7 +191,7 @@ async function garantirPlanos() {
   return planos;
 }
 
-async function seedEmpresa(empresa: EmpresaSeed, planoId: string, offset: number) {
+async function seedEmpresa(empresa: EmpresaSeed, plano: PlanoSeedSalvo, offset: number) {
   console.log(`Alimentando ${empresa.nome_fantasia ?? empresa.razao_social}...`);
 
   const contas = await garantirPlanoContas(empresa.id);
@@ -199,7 +206,7 @@ async function seedEmpresa(empresa: EmpresaSeed, planoId: string, offset: number
   await garantirDocumentos(empresa.id, offset);
   await garantirReunioes(empresa.id, offset);
   await garantirAlertas(empresa.id, offset);
-  await garantirAssinaturaEFaturas(empresa.id, planoId, offset);
+  await garantirAssinaturaEFaturas(empresa.id, plano, offset);
 }
 
 async function garantirPlanoContas(empresaId: string) {
@@ -581,15 +588,16 @@ async function garantirAlertas(empresaId: string, offset: number) {
   if (error) throw error;
 }
 
-async function garantirAssinaturaEFaturas(empresaId: string, planoId: string, offset: number) {
+async function garantirAssinaturaEFaturas(empresaId: string, plano: PlanoSeedSalvo, offset: number) {
   const assinaturaId = uuid(`assinatura:${empresaId}`);
   const vencida = offset % 3 === 0;
+  const valorPlano = arredondarMoeda(plano.preco_mensal);
 
   const { error } = await supabase.from("assinaturas").upsert(
     {
       id: assinaturaId,
       empresa_id: empresaId,
-      plano_id: planoId,
+      plano_id: plano.id,
       ciclo: "mensal",
       status: "ativa",
       dia_vencimento: 5,
@@ -611,7 +619,7 @@ async function garantirAssinaturaEFaturas(empresaId: string, planoId: string, of
       competencia: competenciaAtual,
       emissao: dataRelativa(-12),
       vencimento: vencida ? dataRelativa(-4) : dataRelativa(9),
-      valor: 597,
+      valor: valorPlano,
       valor_pago: 0,
       status: "aberta",
       pago_em: null,
@@ -626,8 +634,8 @@ async function garantirAssinaturaEFaturas(empresaId: string, planoId: string, of
       competencia: competencias[competencias.length - 2],
       emissao: dataRelativa(-42),
       vencimento: dataRelativa(-30),
-      valor: 597,
-      valor_pago: 597,
+      valor: valorPlano,
+      valor_pago: valorPlano,
       status: "paga",
       pago_em: dataRelativa(-28),
       metodo_pagamento: "pix",
@@ -681,6 +689,10 @@ function dataRelativa(dias: number) {
 
 function iso(data: Date) {
   return data.toISOString().slice(0, 10);
+}
+
+function arredondarMoeda(valor: number | string) {
+  return Math.round(Number(valor) * 100) / 100;
 }
 
 main().catch((error) => {

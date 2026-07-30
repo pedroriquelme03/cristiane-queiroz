@@ -1,7 +1,9 @@
-import Link from "next/link";
-import { FilePenLine } from "lucide-react";
+import { Save } from "lucide-react";
 
+import { salvarCadastroEmpresa } from "./actions";
 import { SeletorCliente } from "@/app/(app)/admin/visao-cliente/seletor-cliente";
+import { EditarCadastroModal } from "@/components/empresa/editar-cadastro-modal";
+import { CampoSelect, CampoTexto } from "@/components/ui/campo";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { cnpj as formatarCnpj, data as formatarData } from "@/lib/format";
 import { getSessao } from "@/lib/sessao";
@@ -24,13 +26,28 @@ const NOME_REGIME: Record<RegimeTributario, string> = {
   mei: "MEI",
 };
 
-// Funções auxiliares para validação com fallback
-function getNomeSegmento(valor: string): string {
-  return NOME_SEGMENTO[valor as Segmento] ?? valor;
+const OPCOES_SEGMENTO = [
+  { valor: "geral", rotulo: "Geral" },
+  { valor: "hotelaria", rotulo: "Hotelaria" },
+  { valor: "comercio", rotulo: "Comércio" },
+  { valor: "servicos", rotulo: "Serviços" },
+  { valor: "industria", rotulo: "Indústria" },
+  { valor: "alimentacao", rotulo: "Alimentação" },
+];
+
+const OPCOES_REGIME = [
+  { valor: "simples", rotulo: "Simples Nacional" },
+  { valor: "presumido", rotulo: "Lucro Presumido" },
+  { valor: "real", rotulo: "Lucro Real" },
+  { valor: "mei", rotulo: "MEI" },
+];
+
+function nomeSegmento(valor: string | null) {
+  return valor ? NOME_SEGMENTO[valor as Segmento] ?? valor : "-";
 }
 
-function getNomeRegime(valor: string): string {
-  return NOME_REGIME[valor as RegimeTributario] ?? valor;
+function nomeRegime(valor: string | null) {
+  return valor ? NOME_REGIME[valor as RegimeTributario] ?? valor : "-";
 }
 
 export default async function EmpresaPage({
@@ -65,7 +82,7 @@ export default async function EmpresaPage({
         <Card>
           <CardHeader
             titulo="Cliente visualizado"
-            descricao="Escolha a empresa cujos dados cadastrais e estruturais deseja consultar."
+            descricao="Escolha a empresa para consultar e atualizar o cadastro."
           />
           <CardBody className="max-w-xl">
             <SeletorCliente
@@ -86,74 +103,129 @@ export default async function EmpresaPage({
           </CardBody>
         </Card>
       ) : (
-      <Card>
-        <CardHeader
-          titulo="Dados gerais"
-          acao={
-            sessao.role === "admin" ? (
-              <Link
-                href={`/admin/empresas/${empresa.id}`}
-                className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-xs font-medium hover:bg-surface-muted"
-              >
-                <FilePenLine className="size-4" />
-                Editar cadastro
-              </Link>
-            ) : null
-          }
-        />
-        <CardBody className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <p className="text-sm text-muted-foreground">Razão Social</p>
-              <p className="font-medium">{empresa.razao_social}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Nome Fantasia</p>
-              <p className="font-medium">{empresa.nome_fantasia}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">CNPJ</p>
-              <p className="font-medium font-mono">{formatarCnpj(empresa.cnpj)}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Segmento</p>
-              <p className="font-medium">{getNomeSegmento(empresa.segmento)}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Regime Tributário</p>
-              <p className="font-medium">{getNomeRegime(empresa.regime_tributario)}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Data de Abertura</p>
-              <p className="font-medium">{empresa.data_abertura ? formatarData(empresa.data_abertura) : "—"}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Funcionários</p>
-              <p className="font-medium">{empresa.qtd_funcionarios ?? "—"}</p>
-            </div>
-          </div>
-        </CardBody>
-      </Card>
-      )}
-
-      {/* Se houver unidades, exibir aqui */}
-      {empresa?.unidades && empresa.unidades.length > 0 && (
         <Card>
-          <CardHeader titulo="Estrutura" />
+          <CardHeader
+            titulo="Dados cadastrados"
+            descricao="Informações usadas nos relatórios e na identificação da empresa."
+            acao={<EditarCadastro empresa={empresa} />}
+          />
           <CardBody>
-            <ul className="space-y-2">
-              {empresa.unidades.map((unidade: { id: string; nome: string; tipo: string; cidade: string; uf: string }) => (
-                <li key={unidade.id} className="flex items-center gap-2 border-b last:border-0 py-2">
-                  <span className="font-medium">{unidade.nome}</span>
-                  <span className="text-sm text-muted-foreground">
-                    {unidade.tipo} • {unidade.cidade}/{unidade.uf}
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <dl className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <CampoResumo rotulo="Razão Social" valor={empresa.razao_social} />
+              <CampoResumo rotulo="Nome Fantasia" valor={empresa.nome_fantasia ?? "-"} />
+              <CampoResumo rotulo="CNPJ" valor={empresa.cnpj ? formatarCnpj(empresa.cnpj) : "-"} monoespacado />
+              <CampoResumo rotulo="Segmento" valor={nomeSegmento(empresa.segmento)} />
+              <CampoResumo rotulo="Regime Tributário" valor={nomeRegime(empresa.regime_tributario)} />
+              <CampoResumo rotulo="Data de Abertura" valor={empresa.data_abertura ? formatarData(empresa.data_abertura) : "-"} />
+              <CampoResumo rotulo="Funcionários" valor={String(empresa.qtd_funcionarios ?? 0)} />
+            </dl>
           </CardBody>
         </Card>
       )}
     </div>
+  );
+}
+
+function CampoResumo({
+  rotulo,
+  valor,
+  monoespacado,
+}: {
+  rotulo: string;
+  valor: string;
+  monoespacado?: boolean;
+}) {
+  return (
+    <div>
+      <dt className="text-xs font-medium text-muted-foreground">{rotulo}</dt>
+      <dd className={monoespacado ? "mt-1 font-mono text-sm font-medium" : "mt-1 text-sm font-medium"}>
+        {valor}
+      </dd>
+    </div>
+  );
+}
+
+function FormCadastroEmpresa({
+  empresa,
+}: {
+  empresa: {
+    id: string;
+    razao_social: string;
+    nome_fantasia: string | null;
+    cnpj: string | null;
+    segmento: string;
+    regime_tributario: string | null;
+    data_abertura: string | null;
+    qtd_funcionarios: number | null;
+  };
+}) {
+  return (
+    <form action={salvarCadastroEmpresa.bind(null, empresa.id)} className="space-y-3">
+      <CampoTexto id="razao_social" rotulo="Razão Social" defaultValue={empresa.razao_social} required />
+      <CampoTexto id="nome_fantasia" rotulo="Nome Fantasia" defaultValue={empresa.nome_fantasia ?? ""} required />
+      <CampoTexto
+        id="cnpj"
+        rotulo="CNPJ"
+        defaultValue={empresa.cnpj?.replace(/\D/g, "") ?? ""}
+        inputMode="numeric"
+        minLength={14}
+        maxLength={14}
+        pattern="[0-9]{14}"
+        required
+        dica="Informe somente os 14 números."
+      />
+      <div className="grid gap-3 sm:grid-cols-2">
+        <CampoSelect
+          id="segmento"
+          rotulo="Segmento"
+          defaultValue={empresa.segmento}
+          opcoes={OPCOES_SEGMENTO}
+        />
+        <CampoSelect
+          id="regime_tributario"
+          rotulo="Regime tributário"
+          defaultValue={empresa.regime_tributario ?? "simples"}
+          opcoes={OPCOES_REGIME}
+        />
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <CampoTexto id="data_abertura" rotulo="Data de abertura" tipo="date" defaultValue={empresa.data_abertura ?? ""} />
+        <CampoTexto
+          id="qtd_funcionarios"
+          rotulo="Funcionários"
+          tipo="number"
+          min={0}
+          defaultValue={String(empresa.qtd_funcionarios ?? 0)}
+        />
+      </div>
+      <button
+        type="submit"
+        className="inline-flex items-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-medium text-brand-foreground hover:opacity-90"
+      >
+        <Save className="size-4" aria-hidden />
+        Salvar alterações
+      </button>
+    </form>
+  );
+}
+
+function EditarCadastro({
+  empresa,
+}: {
+  empresa: {
+    id: string;
+    razao_social: string;
+    nome_fantasia: string | null;
+    cnpj: string | null;
+    segmento: string;
+    regime_tributario: string | null;
+    data_abertura: string | null;
+    qtd_funcionarios: number | null;
+  };
+}) {
+  return (
+    <EditarCadastroModal>
+      <FormCadastroEmpresa empresa={empresa} />
+    </EditarCadastroModal>
   );
 }

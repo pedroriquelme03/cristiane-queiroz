@@ -1,8 +1,11 @@
 "use server";
 
-import { esquemaPlano } from "@/lib/validacao/assinatura";
-import { esquemaPagamento } from "@/lib/validacao/assinatura";
+import { revalidatePath } from "next/cache";
+
+import { getSessao } from "@/lib/sessao";
 import { supabaseConfigurado } from "@/lib/supabase/config";
+import { createClient } from "@/lib/supabase/server";
+import { esquemaPagamento, esquemaPlano } from "@/lib/validacao/assinatura";
 
 export interface EstadoAdmin {
   ok?: boolean;
@@ -52,7 +55,7 @@ export async function salvarPlano(
   }
 
   // TODO(supabase): upsert em public.planos (id vazio = insert). Só admin
-  // grava — garantido pelo RLS "planos: admin gerencia".
+  // grava, garantido pelo RLS "planos: admin gerencia".
   return { ok: true };
 }
 
@@ -112,8 +115,88 @@ export async function alternarBloqueio(formData: FormData): Promise<EstadoAdmin>
     };
   }
 
-  // TODO(supabase): update assinaturas.bloqueio_manual + recalcular_status.
+  const sessao = await getSessao();
+  if (sessao.role !== "admin") {
+    return { erro: "Apenas administradores podem alterar o bloqueio." };
+  }
+
+  const supabase = await createClient();
+  const { data: assinatura, error: assinaturaError } = await supabase
+    .from("assinaturas")
+    .select("id, status, carencia_dias, trial_fim")
+    .eq("id", assinaturaId)
+    .single();
+
+  if (assinaturaError || !assinatura) {
+    return { erro: "Não foi possível localizar a assinatura." };
+  }
+
+  const { data: faturas, error: faturasError } = await supabase
+    .from("faturas")
+    .select("status, vencimento")
+    .eq("assinatura_id", assinaturaId);
+
+  if (faturasError) {
+    return { erro: "Não foi possível verificar as faturas da assinatura." };
+  }
+
+  const novoStatus = calcularStatusAssinatura({
+    bloquear,
+    statusAtual: assinatura.status,
+    carenciaDias: assinatura.carencia_dias,
+    trialFim: assinatura.trial_fim,
+    faturas: faturas ?? [],
+  });
+
+  const { error } = await supabase
+    .from("assinaturas")
+    .update({ bloqueio_manual: bloquear, status: novoStatus })
+    .eq("id", assinaturaId);
+
+  if (error) {
+    return { erro: "Não foi possível alterar o bloqueio da assinatura." };
+  }
+
+  revalidatePath("/admin/gestao");
+  revalidatePath("/admin/assinaturas");
   return { ok: true };
+}
+
+function calcularStatusAssinatura({
+  bloquear,
+  statusAtual,
+  carenciaDias,
+  trialFim,
+  faturas,
+}: {
+  bloquear: boolean;
+  statusAtual: string;
+  carenciaDias: number;
+  trialFim: string | null;
+  faturas: { status: string; vencimento: string }[];
+}) {
+  if (statusAtual === "cancelada") return "cancelada";
+  if (bloquear) return "bloqueada";
+
+  const hoje = inicioDoDia(new Date());
+  const limiteCarencia = new Date(hoje);
+  limiteCarencia.setDate(limiteCarencia.getDate() - carenciaDias);
+
+  const abertas = faturas.filter((fatura) => fatura.status === "aberta");
+  const foraDaCarencia = abertas.some((fatura) => inicioDoDia(fatura.vencimento) < limiteCarencia);
+  if (foraDaCarencia) return "bloqueada";
+
+  const vencida = abertas.some((fatura) => inicioDoDia(fatura.vencimento) < hoje);
+  if (vencida) return "inadimplente";
+
+  if (trialFim && inicioDoDia(trialFim) >= hoje) return "trial";
+  return "ativa";
+}
+
+function inicioDoDia(valor: Date | string) {
+  const data = typeof valor === "string" ? new Date(`${valor}T00:00:00`) : new Date(valor);
+  data.setHours(0, 0, 0, 0);
+  return data;
 }
 
 export async function trocarPlano(formData: FormData): Promise<EstadoAdmin> {
@@ -130,6 +213,47 @@ export async function trocarPlano(formData: FormData): Promise<EstadoAdmin> {
     };
   }
 
-  // TODO(supabase): update assinaturas.plano_id/ciclo.
+  const sessao = await getSessao();
+  if (sessao.role !== "admin") {
+    return { erro: "Apenas administradores podem trocar planos." };
+  }
+
+  const supabase = await createClient();
+  const { data: plano, error: planoError } = await supabase
+    .from("planos")
+    .select("preco_mensal, preco_anual")
+    .eq("id", planoId)
+    .single();
+
+  if (planoError || !plano) {
+    return { erro: "Plano não encontrado." };
+  }
+
+  const valor = ciclo === "anual"
+    ? Number(plano.preco_anual ?? Number(plano.preco_mensal) * 12)
+    : Number(plano.preco_mensal);
+
+  const { error } = await supabase
+    .from("assinaturas")
+    .update({ plano_id: planoId, ciclo })
+    .eq("id", assinaturaId);
+
+  if (error) {
+    return { erro: "Não foi possível trocar o plano." };
+  }
+
+  const { error: faturasError } = await supabase
+    .from("faturas")
+    .update({ valor })
+    .eq("assinatura_id", assinaturaId)
+    .eq("status", "aberta");
+
+  if (faturasError) {
+    return { erro: "Plano trocado, mas não foi possível atualizar as faturas abertas." };
+  }
+
+  revalidatePath("/admin/gestao");
+  revalidatePath("/admin/assinaturas");
+  revalidatePath("/assinatura");
   return { ok: true };
 }

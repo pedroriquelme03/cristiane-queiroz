@@ -4,15 +4,21 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 
 import { ORDEM_GRUPOS, ROTULOS_GRUPO, itensVisiveis } from "@/lib/navegacao";
-import type { Papel } from "@/lib/types";
+import type { Papel, Plano } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-export function BarraLateral({ role }: { role: Papel }) {
+export function BarraLateral({
+  role,
+  plano,
+}: {
+  role: Papel;
+  plano?: Pick<Plano, "nome" | "ordem"> | null;
+}) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const empresaSelecionada = searchParams.get("empresa");
 
-  const itens = itensVisiveis(role);
+  const itens = itensVisiveis(role, plano);
   const grupos = ORDEM_GRUPOS.filter((g) => itens.some((i) => i.grupo === g));
 
   const estaAtivo = (href: string) =>

@@ -1,8 +1,17 @@
-import { Building2, MapPin, Users } from "lucide-react";
+import type { ReactNode } from "react";
+import { Building2, MapPin, Plus, Trash2, Users, UsersRound } from "lucide-react";
 
+import {
+  adicionarArea,
+  adicionarCargo,
+  adicionarUnidade,
+  atualizarColaboradores,
+  removerArea,
+  removerCargo,
+  removerUnidade,
+} from "@/app/(app)/empresa/actions";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { Kpi } from "@/components/ui/kpi";
+import { Card, CardBody } from "@/components/ui/card";
 import { getSessao } from "@/lib/sessao";
 import { createClient } from "@/lib/supabase/server";
 
@@ -12,6 +21,13 @@ const TIPO_UNIDADE = {
   cd: "Centro de distribuição",
   loja: "Loja",
 } as const;
+
+const TIPOS_UNIDADE = [
+  ["matriz", "Matriz"],
+  ["filial", "Filial"],
+  ["loja", "Loja"],
+  ["cd", "Centro de distribuição"],
+] as const;
 
 export default async function EstruturaPage({
   searchParams,
@@ -24,6 +40,8 @@ export default async function EstruturaPage({
     sessao.role === "admin" && typeof empresaParam === "string"
       ? empresaParam
       : sessao.empresaId;
+  const podeEditar = Boolean(empresaId);
+
   const supabase = await createClient();
   const [{ data: empresa, error: empresaError }, { data: unidades, error: unidadesError }, { data: areas, error: areasError }] =
     await Promise.all([
@@ -53,7 +71,7 @@ export default async function EstruturaPage({
     return (
       <Card>
         <CardBody className="py-12 text-center text-sm text-muted-foreground">
-          Selecione um cliente na aba “Dados gerais” para consultar a estrutura.
+          Selecione um cliente na aba Dados gerais para consultar a estrutura.
         </CardBody>
       </Card>
     );
@@ -72,84 +90,278 @@ export default async function EstruturaPage({
     : { data: [], error: null };
 
   if (cargosError) {
-    return <p className="text-sm text-destructive">Não foi possível carregar o organograma da empresa.</p>;
+    return <p className="text-sm text-destructive">Não foi possível carregar a equipe por área.</p>;
   }
 
-  const totalOrganograma = (cargos ?? []).reduce((soma, cargo) => soma + cargo.quantidade, 0);
+  const listaCargos = cargos ?? [];
+  const totalCargos = listaCargos.length;
+  const totalPosicoes = listaCargos.reduce((soma, cargo) => soma + cargo.quantidade, 0);
 
   return (
-    <>
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Kpi
-          rotulo="Colaboradores"
-          valor={String(empresa.qtd_funcionarios ?? 0)}
-          icone={<Users className="size-4" aria-hidden />}
-        />
-        <Kpi
-          rotulo="Unidades"
-          valor={String(listaUnidades.length)}
-          icone={<Building2 className="size-4" aria-hidden />}
-        />
-        <Kpi
-          rotulo="Áreas no organograma"
-          valor={String(listaAreas.length)}
-          nota={`${totalOrganograma} posições mapeadas`}
-        />
-      </div>
+    <div className="grid gap-4 xl:grid-cols-3">
+      <PainelEstrutura
+        titulo="Colaboradores"
+        valor={String(empresa.qtd_funcionarios ?? 0)}
+        descricao="Total informado pela empresa"
+        icone={<Users className="size-4" aria-hidden />}
+        acao={podeEditar ? <FormColaboradores empresaId={empresa.id} valorAtual={empresa.qtd_funcionarios ?? 0} /> : null}
+      >
+        <p className="text-sm text-muted-foreground">
+          Use esse número como visão geral da equipe. Os cargos abaixo detalham onde essas pessoas estão alocadas.
+        </p>
+      </PainelEstrutura>
 
-      <Card>
-        <CardHeader titulo="Unidades e filiais" descricao={empresa.razao_social} />
-        <CardBody className="space-y-3">
-          {listaUnidades.length ? listaUnidades.map((unidade) => (
-            <div
-              key={unidade.id}
-              className="flex items-center justify-between gap-3 rounded-lg border border-border px-4 py-3"
-            >
-              <div className="flex items-center gap-3">
-                <span className="grid size-9 place-items-center rounded-lg bg-brand-soft text-brand">
-                  <Building2 className="size-4" aria-hidden />
-                </span>
-                <div>
-                  <p className="text-sm font-medium">{unidade.nome}</p>
-                  <p className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <MapPin className="size-3" aria-hidden />
-                    {unidade.cidade} · {unidade.uf}
-                  </p>
+      <PainelEstrutura
+        titulo="Unidades e filiais"
+        valor={String(listaUnidades.length)}
+        descricao={listaUnidades.length === 1 ? "1 local cadastrado" : `${listaUnidades.length} locais cadastrados`}
+        icone={<Building2 className="size-4" aria-hidden />}
+        acao={podeEditar ? <FormUnidade empresaId={empresa.id} /> : null}
+      >
+        {listaUnidades.length ? (
+          <div className="space-y-2">
+            {listaUnidades.map((unidade) => (
+              <div key={unidade.id} className="rounded-lg border border-border px-3 py-2.5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{unidade.nome}</p>
+                    <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                      <MapPin className="size-3" aria-hidden />
+                      {unidade.cidade ?? "Cidade não informada"}
+                      {unidade.uf ? `/${unidade.uf}` : ""}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Badge tom={unidade.tipo === "matriz" ? "marca" : "neutro"}>
+                      {TIPO_UNIDADE[unidade.tipo as keyof typeof TIPO_UNIDADE] ?? unidade.tipo}
+                    </Badge>
+                    {podeEditar ? (
+                      <form action={removerUnidade.bind(null, empresa.id, unidade.id)}>
+                        <BotaoIcone title="Remover unidade">
+                          <Trash2 className="size-3.5" aria-hidden />
+                        </BotaoIcone>
+                      </form>
+                    ) : null}
+                  </div>
                 </div>
               </div>
-              <Badge tom={unidade.tipo === "matriz" ? "marca" : "neutro"}>
-                {TIPO_UNIDADE[unidade.tipo as keyof typeof TIPO_UNIDADE] ?? unidade.tipo}
-              </Badge>
-            </div>
-          )) : (
-            <p className="text-sm text-muted-foreground">Nenhuma unidade cadastrada para esta empresa.</p>
-          )}
-        </CardBody>
-      </Card>
+            ))}
+          </div>
+        ) : (
+          <EstadoVazio icone={<Building2 className="size-5" />} texto="Nenhuma unidade cadastrada." />
+        )}
+      </PainelEstrutura>
 
-      <Card>
-        <CardHeader titulo="Organograma" descricao="Distribuição das posições por área" />
-        <CardBody className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {listaAreas.length ? listaAreas.map((area) => {
-            const cargosArea = (cargos ?? []).filter((cargo) => cargo.area_id === area.id);
-            const total = cargosArea.reduce((soma, cargo) => soma + cargo.quantidade, 0);
-            return <section key={area.id} className="rounded-lg border border-border p-4">
-              <header className="flex items-baseline justify-between gap-2">
-                <h3 className="text-sm font-semibold">{area.nome}</h3>
-                <span className="tabular text-xs text-muted-foreground">{total}</span>
-              </header>
-              <ul className="mt-2.5 space-y-1.5">
-                {cargosArea.length ? cargosArea.map((cargo) => (
-                  <li key={cargo.id} className="flex items-baseline justify-between gap-2 text-sm">
-                    <span className="text-muted-foreground">{cargo.nome}</span>
-                    <span className="tabular font-medium">{cargo.quantidade}</span>
-                  </li>
-                )) : <li className="text-sm text-muted-foreground">Nenhum cargo cadastrado.</li>}
-              </ul>
-            </section>;
-          }) : <p className="text-sm text-muted-foreground">Nenhuma estrutura organizacional cadastrada para esta empresa.</p>}
-        </CardBody>
-      </Card>
-    </>
+      <PainelEstrutura
+        titulo="Áreas e cargos"
+        valor={String(listaAreas.length)}
+        descricao={`${totalCargos} cargos · ${totalPosicoes} posições`}
+        icone={<UsersRound className="size-4" aria-hidden />}
+        acao={podeEditar ? <FormArea empresaId={empresa.id} /> : null}
+      >
+        {listaAreas.length ? (
+          <div className="space-y-3">
+            {listaAreas.map((area) => {
+              const cargosArea = listaCargos.filter((cargo) => cargo.area_id === area.id);
+              const total = cargosArea.reduce((soma, cargo) => soma + cargo.quantidade, 0);
+              return (
+                <section key={area.id} className="rounded-lg border border-border px-3 py-3">
+                  <header className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="truncate text-sm font-semibold">{area.nome}</h3>
+                      <p className="mt-0.5 text-xs text-muted-foreground">{total} pessoas nesta área</p>
+                    </div>
+                    {podeEditar ? (
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <form action={removerArea.bind(null, empresa.id, area.id)}>
+                          <BotaoIcone title="Remover área e cargos">
+                            <Trash2 className="size-3.5" aria-hidden />
+                          </BotaoIcone>
+                        </form>
+                      </div>
+                    ) : null}
+                  </header>
+                    <ul className="mt-3 space-y-1.5">
+                    {cargosArea.length ? cargosArea.map((cargo) => (
+                      <li key={cargo.id} className="flex items-center justify-between gap-2 text-sm">
+                        <span className="truncate text-muted-foreground">{cargo.nome}</span>
+                        <span className="flex items-center gap-2">
+                          <strong className="tabular">{cargo.quantidade}</strong>
+                          {podeEditar ? (
+                            <form action={removerCargo.bind(null, empresa.id, cargo.id)}>
+                              <button
+                                type="submit"
+                                title="Remover cargo"
+                                aria-label="Remover cargo"
+                                className="text-muted-foreground hover:text-negative"
+                              >
+                                <Trash2 className="size-3.5" aria-hidden />
+                              </button>
+                            </form>
+                          ) : null}
+                        </span>
+                      </li>
+                      )) : <li className="text-sm text-muted-foreground">Nenhum cargo cadastrado.</li>}
+                    </ul>
+                    {podeEditar ? <FormCargo empresaId={empresa.id} areaId={area.id} /> : null}
+                  </section>
+                );
+              })}
+          </div>
+        ) : (
+          <EstadoVazio icone={<UsersRound className="size-5" />} texto="Nenhuma área ou cargo cadastrado." />
+        )}
+      </PainelEstrutura>
+    </div>
+  );
+}
+
+function PainelEstrutura({
+  titulo,
+  valor,
+  descricao,
+  icone,
+  acao,
+  children,
+}: {
+  titulo: string;
+  valor: string;
+  descricao: string;
+  icone: ReactNode;
+  acao?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <Card className="min-h-[360px]">
+      <CardBody className="space-y-4">
+        <header className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-medium text-muted-foreground">{titulo}</p>
+            <p className="mt-1.5 text-2xl font-semibold tracking-tight">{valor}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{descricao}</p>
+          </div>
+          <span className="text-muted-foreground">{icone}</span>
+        </header>
+        {acao ? <div>{acao}</div> : null}
+        <div className="max-h-[420px] overflow-y-auto pr-1">{children}</div>
+      </CardBody>
+    </Card>
+  );
+}
+
+function FormColaboradores({
+  empresaId,
+  valorAtual,
+}: {
+  empresaId: string;
+  valorAtual: number;
+}) {
+  return (
+    <details>
+      <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-surface-muted hover:text-foreground">
+        <Plus className="size-3.5" aria-hidden />
+        Colaboradores
+      </summary>
+      <form action={atualizarColaboradores.bind(null, empresaId)} className="mt-3 flex gap-2">
+        <input
+          name="qtd_funcionarios"
+          required
+          type="number"
+          min={0}
+          defaultValue={valorAtual}
+          className="min-w-0 flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm"
+        />
+        <button className="rounded-lg bg-brand px-3 py-2 text-xs font-medium text-brand-foreground hover:opacity-90">
+          Salvar
+        </button>
+      </form>
+    </details>
+  );
+}
+
+function FormUnidade({ empresaId }: { empresaId: string }) {
+  return (
+    <details>
+      <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-lg bg-brand px-3 py-2 text-xs font-medium text-brand-foreground hover:opacity-90">
+        <Plus className="size-4" aria-hidden />
+        Unidade
+      </summary>
+      <form action={adicionarUnidade.bind(null, empresaId)} className="mt-3 grid gap-2">
+        <input name="nome" required placeholder="Nome da unidade" className="rounded-lg border border-border bg-surface px-3 py-2 text-sm" />
+        <div className="grid gap-2 sm:grid-cols-[1fr_1fr_64px]">
+          <select name="tipo" defaultValue="filial" className="rounded-lg border border-border bg-surface px-3 py-2 text-sm">
+            {TIPOS_UNIDADE.map(([valor, rotulo]) => <option key={valor} value={valor}>{rotulo}</option>)}
+          </select>
+          <input name="cidade" placeholder="Cidade" className="rounded-lg border border-border bg-surface px-3 py-2 text-sm" />
+          <input name="uf" maxLength={2} placeholder="UF" className="rounded-lg border border-border bg-surface px-3 py-2 text-sm uppercase" />
+        </div>
+        <button className="rounded-lg bg-brand px-3 py-2 text-xs font-medium text-brand-foreground hover:opacity-90">
+          Adicionar unidade
+        </button>
+      </form>
+    </details>
+  );
+}
+
+function FormArea({ empresaId }: { empresaId: string }) {
+  return (
+    <details>
+      <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-lg bg-brand px-3 py-2 text-xs font-medium text-brand-foreground hover:opacity-90">
+        <Plus className="size-4" aria-hidden />
+        Área
+      </summary>
+      <form action={adicionarArea.bind(null, empresaId)} className="mt-3 flex gap-2">
+        <input name="nome" required placeholder="Nova área, por exemplo: Financeiro" className="min-w-0 flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm" />
+        <button className="rounded-lg bg-brand px-3 py-2 text-xs font-medium text-brand-foreground hover:opacity-90">
+          Adicionar
+        </button>
+      </form>
+    </details>
+  );
+}
+
+function FormCargo({ empresaId, areaId }: { empresaId: string; areaId: string }) {
+  return (
+    <details className="mt-3 border-t border-border pt-3">
+      <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-xs font-medium text-brand hover:underline">
+        <Plus className="size-3.5" aria-hidden />
+        Adicionar cargo
+      </summary>
+      <form action={adicionarCargo.bind(null, empresaId, areaId)} className="mt-2 grid gap-2 sm:grid-cols-[1fr_72px_auto]">
+        <input name="nome" required placeholder="Nome do cargo" className="min-w-0 rounded-lg border border-border bg-surface px-3 py-2 text-sm" />
+        <input name="quantidade" required type="number" min="0" defaultValue="1" className="rounded-lg border border-border bg-surface px-3 py-2 text-sm" />
+        <button className="rounded-lg border border-border px-3 py-2 text-xs font-medium hover:bg-surface-muted">
+          Adicionar
+        </button>
+      </form>
+    </details>
+  );
+}
+
+function BotaoIcone({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="submit"
+      title={title}
+      aria-label={title}
+      className="grid size-8 place-items-center rounded-lg text-muted-foreground hover:bg-negative-soft hover:text-negative"
+    >
+      {children}
+    </button>
+  );
+}
+
+function EstadoVazio({ icone, texto }: { icone: ReactNode; texto: string }) {
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-dashed border-border px-4 py-5 text-sm text-muted-foreground">
+      {icone}
+      {texto}
+    </div>
   );
 }

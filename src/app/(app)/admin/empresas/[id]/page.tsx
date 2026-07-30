@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { excluirUsuario } from "./action";
@@ -27,17 +26,7 @@ export default async function EditarEmpresaPage({
       <CardHeader
         titulo="Editar usuário"
         descricao="Atualize os dados cadastrais da empresa vinculada ao usuário."
-        acao={
-          <div className="flex items-center gap-3">
-            <Link
-              href={`/admin/empresas/${id}/estrutura`}
-              className="text-xs font-medium text-brand hover:underline"
-            >
-              Gerenciar estrutura
-            </Link>
-            <BotaoExcluirUsuario action={excluirUsuarioPorId} />
-          </div>
-        }
+        acao={<BotaoExcluirUsuario action={excluirUsuarioPorId} />}
       />
       <CardBody>
         <FormEditarEmpresa empresa={empresa} />
