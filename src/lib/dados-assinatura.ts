@@ -2,6 +2,8 @@
  * Fronteira de dados do modulo de assinaturas.
  * As telas leem planos, assinaturas e faturas diretamente do Supabase.
  */
+import { cache } from "react";
+
 import { calcularEstado } from "@/lib/assinatura";
 import { getSessao } from "@/lib/sessao";
 import { supabaseConfigurado } from "@/lib/supabase/config";
@@ -19,7 +21,7 @@ import type {
 // Planos
 // ---------------------------------------------------------------------------
 
-export async function getPlanos(): Promise<Plano[]> {
+export const getPlanos = cache(async (): Promise<Plano[]> => {
   const supabase = await criarSupabaseObrigatorio();
   const { data, error } = await supabase
     .from("planos")
@@ -29,14 +31,14 @@ export async function getPlanos(): Promise<Plano[]> {
 
   if (error) throw new Error("Nao foi possivel carregar os planos.");
   return (data ?? []).map(mapPlano);
-}
+});
 
 /** Planos visíveis na vitrine do cliente. */
 export async function getPlanosPublicos(): Promise<Plano[]> {
   return (await getPlanos()).filter((p) => p.publico && p.ativo);
 }
 
-export async function getPlano(id: string): Promise<Plano | null> {
+export const getPlano = cache(async (id: string): Promise<Plano | null> => {
   const supabase = await criarSupabaseObrigatorio();
   const { data, error } = await supabase
     .from("planos")
@@ -46,15 +48,15 @@ export async function getPlano(id: string): Promise<Plano | null> {
 
   if (error) throw new Error("Nao foi possivel carregar o plano.");
   return data ? mapPlano(data) : null;
-}
+});
 
 // ---------------------------------------------------------------------------
 // Assinatura de uma empresa
 // ---------------------------------------------------------------------------
 
-export async function getAssinaturaEmpresa(
+export const getAssinaturaEmpresa = cache(async (
   empresaId: string,
-): Promise<{ assinatura: Assinatura; plano: Plano; faturas: Fatura[] } | null> {
+): Promise<{ assinatura: Assinatura; plano: Plano; faturas: Fatura[] } | null> => {
   const tenant = (await getTenants()).find((t) => t.empresa.id === empresaId);
   if (!tenant) return null;
   return {
@@ -62,7 +64,7 @@ export async function getAssinaturaEmpresa(
     plano: tenant.plano,
     faturas: tenant.faturas,
   };
-}
+});
 
 /** Estado calculado da empresa da sessão atual. Consumido pelo guarda. */
 export async function getEstadoAssinaturaAtual(): Promise<EstadoAssinatura | null> {
@@ -72,7 +74,7 @@ export async function getEstadoAssinaturaAtual(): Promise<EstadoAssinatura | nul
   return calcularEstado(assinatura.assinatura, assinatura.faturas);
 }
 
-export async function getFaturasEmpresa(empresaId: string): Promise<Fatura[]> {
+export const getFaturasEmpresa = cache(async (empresaId: string): Promise<Fatura[]> => {
   const supabase = await criarSupabaseObrigatorio();
   const { data, error } = await supabase
     .from("faturas")
@@ -82,13 +84,13 @@ export async function getFaturasEmpresa(empresaId: string): Promise<Fatura[]> {
 
   if (error) throw new Error("Nao foi possivel carregar as faturas.");
   return (data ?? []).map(mapFatura);
-}
+});
 
 // ---------------------------------------------------------------------------
 // Visão do super admin: carteira de tenants
 // ---------------------------------------------------------------------------
 
-export async function getTenants(): Promise<TenantAssinatura[]> {
+export const getTenants = cache(async (): Promise<TenantAssinatura[]> => {
   const supabase = await criarSupabaseObrigatorio();
   const { data, error } = await supabase
     .from("assinaturas")
@@ -120,7 +122,7 @@ export async function getTenants(): Promise<TenantAssinatura[]> {
         faturas,
       };
     });
-}
+});
 
 export interface ResumoAdmin {
   totalTenants: number;

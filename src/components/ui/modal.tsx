@@ -3,6 +3,8 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { X } from "lucide-react";
 
+import { cn } from "@/lib/utils";
+
 /**
  * Modal sobre o <dialog> nativo: foco preso, Esc para fechar e inerte por
  * baixo já vêm do navegador, sem biblioteca nem armadilha de acessibilidade.
@@ -12,12 +14,14 @@ export function Modal({
   titulo,
   descricao,
   onFechar,
+  className,
   children,
 }: {
   aberto: boolean;
   titulo: string;
   descricao?: string;
   onFechar: () => void;
+  className?: string;
   children: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -40,7 +44,10 @@ export function Modal({
       onClick={(e) => {
         if (e.target === ref.current) onFechar();
       }}
-      className="m-auto w-full max-w-lg rounded-xl border border-border bg-surface p-0 text-foreground backdrop:bg-black/50"
+      className={cn(
+        "m-auto max-h-[90dvh] w-full max-w-lg overflow-hidden rounded-xl border border-border bg-surface p-0 text-foreground backdrop:bg-black/50",
+        className,
+      )}
     >
       <header className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
         <div>
@@ -60,7 +67,7 @@ export function Modal({
           <X className="size-4" aria-hidden />
         </button>
       </header>
-      <div className="px-5 py-4">{children}</div>
+      <div className="max-h-[calc(90dvh-73px)] overflow-y-auto px-5 py-4">{children}</div>
     </dialog>
   );
 }

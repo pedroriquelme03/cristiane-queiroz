@@ -106,7 +106,8 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (user && !ehPublica) {
-    const acessoPlano = await podeAcessarRotaPeloPlano(supabase, user.id, pathname);
+    const acessoUsuario = await getAcessoUsuario(supabase, user.id);
+    const acessoPlano = podeAcessarRotaPeloPlano(acessoUsuario, pathname);
 
     if (!acessoPlano.permitido) {
       const url = request.nextUrl.clone();
@@ -120,7 +121,7 @@ export async function updateSession(request: NextRequest) {
     );
 
     if (!liberadaPorBloqueio) {
-      const bloqueada = await empresaAtualBloqueada(supabase, user.id);
+      const bloqueada = await empresaAtualBloqueada(supabase, acessoUsuario);
 
       if (bloqueada) {
         const url = request.nextUrl.clone();
@@ -134,40 +135,68 @@ export async function updateSession(request: NextRequest) {
   return response;
 }
 
-async function podeAcessarRotaPeloPlano(
+type AcessoUsuario = {
+  role: string | null;
+  empresaId: string | null;
+  assinatura: {
+    id: string;
+    status: string;
+    bloqueio_manual: boolean;
+    carencia_dias: number | null;
+    plano: { nome: string; ordem: number } | { nome: string; ordem: number }[] | null;
+  } | null;
+};
+
+async function getAcessoUsuario(
   supabase: ReturnType<typeof createServerClient>,
   userId: string,
-  pathname: string,
-) {
-  const { data: perfil } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", userId)
-    .maybeSingle();
+): Promise<AcessoUsuario> {
+  const [{ data: perfil }, { data: vinculo }] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", userId)
+      .maybeSingle(),
+    supabase
+      .from("empresa_membros")
+      .select("empresa_id")
+      .eq("user_id", userId)
+      .limit(1)
+      .maybeSingle(),
+  ]);
 
-  if (perfil?.role === "admin") return { permitido: true };
-
-  const recurso = recursoDaRota(pathname);
-  if (recurso === "assinatura") return { permitido: true };
-
-  const { data: vinculo } = await supabase
-    .from("empresa_membros")
-    .select("empresa_id")
-    .eq("user_id", userId)
-    .limit(1)
-    .maybeSingle();
-
-  if (!vinculo?.empresa_id) {
-    return { permitido: recurso === "dashboard" };
+  if (perfil?.role === "admin" || !vinculo?.empresa_id) {
+    return {
+      role: perfil?.role ?? null,
+      empresaId: vinculo?.empresa_id ?? null,
+      assinatura: null,
+    };
   }
 
   const { data: assinatura } = await supabase
     .from("assinaturas")
-    .select("plano:planos(nome, ordem)")
+    .select("id, status, bloqueio_manual, carencia_dias, plano:planos(nome, ordem)")
     .eq("empresa_id", vinculo.empresa_id)
     .maybeSingle();
 
-  const plano = normalizarJoin<{ nome: string; ordem: number }>(assinatura?.plano ?? null);
+  return {
+    role: perfil?.role ?? null,
+    empresaId: vinculo.empresa_id,
+    assinatura: assinatura ?? null,
+  };
+}
+
+function podeAcessarRotaPeloPlano(acesso: AcessoUsuario, pathname: string) {
+  if (acesso.role === "admin") return { permitido: true };
+
+  const recurso = recursoDaRota(pathname);
+  if (recurso === "assinatura") return { permitido: true };
+
+  if (!acesso.empresaId) {
+    return { permitido: recurso === "dashboard" };
+  }
+
+  const plano = normalizarJoin<{ nome: string; ordem: number }>(acesso.assinatura?.plano ?? null);
   const permitido = planoPermite(plano, recurso);
   return {
     permitido,
@@ -177,31 +206,11 @@ async function podeAcessarRotaPeloPlano(
 
 async function empresaAtualBloqueada(
   supabase: ReturnType<typeof createServerClient>,
-  userId: string,
+  acesso: AcessoUsuario,
 ) {
-  const { data: perfil } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", userId)
-    .maybeSingle();
+  if (acesso.role === "admin") return false;
 
-  if (perfil?.role === "admin") return false;
-
-  const { data: vinculo } = await supabase
-    .from("empresa_membros")
-    .select("empresa_id")
-    .eq("user_id", userId)
-    .limit(1)
-    .maybeSingle();
-
-  if (!vinculo?.empresa_id) return false;
-
-  const { data: assinatura } = await supabase
-    .from("assinaturas")
-    .select("id, status, bloqueio_manual, carencia_dias")
-    .eq("empresa_id", vinculo.empresa_id)
-    .maybeSingle();
-
+  const assinatura = acesso.assinatura;
   if (!assinatura) return false;
   if (assinatura.bloqueio_manual || assinatura.status === "cancelada") {
     return true;

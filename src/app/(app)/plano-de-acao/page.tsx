@@ -1,11 +1,19 @@
+import { Clock3 } from "lucide-react";
+
 import { SeletorEmpresaAdmin } from "@/components/admin/seletor-empresa-admin";
+import {
+  DialogoPlanoAcao,
+  DialogoProgresso,
+  ExcluirPlanoAcao,
+} from "@/components/plano-acao/controles-plano-acao";
 import { Badge, type TomBadge } from "@/components/ui/badge";
 import { CabecalhoPagina } from "@/components/ui/cabecalho-pagina";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Kpi } from "@/components/ui/kpi";
 import { Progresso } from "@/components/ui/progresso";
-import { getPlanosAcao } from "@/lib/dados";
+import { getHistoricoPlanosAcao, getPlanosAcao } from "@/lib/dados";
 import { data as formatarData, diasAte, moeda } from "@/lib/format";
+import { getSessao } from "@/lib/sessao";
 import type { AreaDiagnostico, PlanoAcao, StatusAcao } from "@/lib/types";
 
 const ROTULO_STATUS: Record<StatusAcao, string> = {
@@ -61,9 +69,16 @@ export default async function PlanoDeAcaoPage({
 }: {
   searchParams: Promise<{ empresa?: string | string[] }>;
 }) {
-  const { empresa: empresaParam } = await searchParams;
+  const [{ empresa: empresaParam }, sessao] = await Promise.all([
+    searchParams,
+    getSessao(),
+  ]);
   const empresaId = typeof empresaParam === "string" ? empresaParam : undefined;
-  const acoes = await getPlanosAcao(empresaId);
+  const empresaIdAtiva = sessao.role === "admin" ? empresaId : sessao.empresaId;
+  const [acoes, historico] = await Promise.all([
+    getPlanosAcao(empresaIdAtiva),
+    getHistoricoPlanosAcao(empresaIdAtiva),
+  ]);
 
   const concluidas = acoes.filter((a) => a.status === "concluido");
   const emAndamento = acoes.filter((a) => a.status === "em_andamento");
@@ -71,16 +86,23 @@ export default async function PlanoDeAcaoPage({
   const impactoTotal = acoes.reduce((s, a) => s + (a.impactoEstimado ?? 0), 0);
   const impactoCapturado = concluidas.reduce((s, a) => s + (a.impactoEstimado ?? 0), 0);
 
-  const avancoMedio = Math.round(
-    acoes.reduce((s, a) => s + a.percentual, 0) / acoes.length,
-  );
+  const avancoMedio = acoes.length
+    ? Math.round(acoes.reduce((s, a) => s + a.percentual, 0) / acoes.length)
+    : 0;
+
+  const acoesCabecalho = sessao.role === "admin" ? (
+    <div className="flex flex-wrap items-end justify-end gap-2">
+      <SeletorEmpresaAdmin className="w-full sm:w-72" />
+      <DialogoPlanoAcao empresaId={empresaIdAtiva} />
+    </div>
+  ) : undefined;
 
   return (
     <>
       <CabecalhoPagina
         titulo="Plano de ação"
         descricao="Acompanhamento das ações propostas pela consultoria"
-        acao={<SeletorEmpresaAdmin />}
+        acao={acoesCabecalho}
       />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -109,6 +131,13 @@ export default async function PlanoDeAcaoPage({
           descricao="Problema identificado, ação proposta e situação atual"
         />
         <CardBody className="space-y-3">
+          {acoes.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              {sessao.role === "admin" && !empresaIdAtiva
+                ? "Selecione uma empresa para visualizar e cadastrar ações."
+                : "Nenhuma ação cadastrada."}
+            </p>
+          ) : null}
           {acoes.map((acao) => {
             const atrasada = estaAtrasada(acao);
             return (
@@ -169,11 +198,55 @@ export default async function PlanoDeAcaoPage({
                     }
                   />
                 </div>
+
+                {sessao.role === "admin" || sessao.role === "cliente" ? (
+                  <footer className="mt-3 flex flex-wrap items-center justify-end gap-3 border-t border-border pt-3">
+                    {sessao.role === "cliente" ? (
+                      <DialogoProgresso acao={acao} admin={false} />
+                    ) : (
+                      <>
+                        <DialogoPlanoAcao empresaId={empresaIdAtiva} acao={acao} />
+                        <ExcluirPlanoAcao acao={acao} />
+                      </>
+                    )}
+                  </footer>
+                ) : null}
               </article>
             );
           })}
         </CardBody>
       </Card>
+
+      {historico.length ? (
+        <Card>
+          <CardHeader
+            titulo="Histórico de alterações"
+            descricao="Registro de quem alterou o plano e quando"
+          />
+          <CardBody className="space-y-3">
+            {historico.slice(0, 20).map((evento) => (
+              <article key={evento.id} className="flex gap-3 border-b border-border pb-3 last:border-0 last:pb-0">
+                <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-surface-muted text-muted-foreground">
+                  <Clock3 className="size-4" aria-hidden />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-sm">{evento.descricao}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {evento.autorNome} · {formatarDataHora(evento.criadoEm)}
+                  </p>
+                </div>
+              </article>
+            ))}
+          </CardBody>
+        </Card>
+      ) : null}
     </>
   );
+}
+
+function formatarDataHora(iso: string) {
+  return new Date(iso).toLocaleString("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short",
+  });
 }

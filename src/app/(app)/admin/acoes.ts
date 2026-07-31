@@ -12,6 +12,7 @@ export interface EstadoAdmin {
   erro?: string;
   campos?: Record<string, string>;
   valores?: Record<string, string>;
+  bloqueado?: boolean;
 }
 
 function errosPorCampo(issues: { path: PropertyKey[]; message: string }[]) {
@@ -159,7 +160,7 @@ export async function alternarBloqueio(formData: FormData): Promise<EstadoAdmin>
 
   revalidatePath("/admin/gestao");
   revalidatePath("/admin/assinaturas");
-  return { ok: true };
+  return { ok: true, bloqueado: bloquear };
 }
 
 function calcularStatusAssinatura({

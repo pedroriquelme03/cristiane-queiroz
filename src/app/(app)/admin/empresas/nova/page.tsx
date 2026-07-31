@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { SeletorSegmento } from "@/components/admin/seletor-segmento";
 import { criarEmpresa } from "./action"; // ← NOME CORRETO: action.ts
 
 export default function NovaEmpresaPage() {
@@ -55,23 +56,7 @@ export default function NovaEmpresaPage() {
             className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-brand focus:outline-none"
           />
         </div>
-        <div>
-          <label htmlFor="segmento" className="block text-sm font-medium mb-1">
-            Segmento *
-          </label>
-          <select
-            id="segmento"
-            name="segmento"
-            required
-            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-brand focus:outline-none"
-          >
-            <option value="hotelaria">Hotelaria</option>
-            <option value="comercio">Comércio</option>
-            <option value="servicos">Serviços</option>
-            <option value="industria">Indústria</option>
-            <option value="alimentacao">Alimentação</option>
-          </select>
-        </div>
+        <SeletorSegmento />
 
         <div className="border-t pt-4">
           <h3 className="text-sm font-medium mb-2">Dados de acesso do cliente</h3>

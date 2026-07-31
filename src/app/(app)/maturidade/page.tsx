@@ -1,24 +1,15 @@
 import { GraficoEvolucaoMaturidade } from "@/components/graficos/grafico-evolucao-maturidade";
 import { SeletorEmpresaAdmin } from "@/components/admin/seletor-empresa-admin";
+import { DialogoAvaliacao } from "@/components/avaliacoes/dialogo-avaliacao";
 import { Badge } from "@/components/ui/badge";
 import { CabecalhoPagina } from "@/components/ui/cabecalho-pagina";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Kpi } from "@/components/ui/kpi";
 import { Progresso } from "@/components/ui/progresso";
+import { ROTULO_AREA } from "@/lib/avaliacoes";
 import { getMaturidade } from "@/lib/dados";
 import { competenciaExtenso } from "@/lib/format";
-import type { AreaDiagnostico } from "@/lib/types";
-
-const ROTULO_AREA: Record<AreaDiagnostico, string> = {
-  financeiro: "Financeiro",
-  compras: "Compras",
-  estoque: "Estoque",
-  comercial: "Comercial",
-  rh: "RH",
-  processos: "Processos",
-  tecnologia: "Tecnologia",
-  gestao: "Gestão",
-};
+import { getSessao } from "@/lib/sessao";
 
 /** Estágios de maturidade — a faixa diz o que a pontuação significa na prática. */
 const ESTAGIOS = [
@@ -51,9 +42,33 @@ export default async function MaturidadePage({
 }: {
   searchParams: Promise<{ empresa?: string | string[] }>;
 }) {
-  const { empresa: empresaParam } = await searchParams;
+  const [{ empresa: empresaParam }, sessao] = await Promise.all([
+    searchParams,
+    getSessao(),
+  ]);
   const empresaId = typeof empresaParam === "string" ? empresaParam : undefined;
-  const avaliacoes = await getMaturidade(empresaId);
+  const empresaIdAtiva = sessao.role === "admin" ? empresaId : sessao.empresaId;
+  const avaliacoes = await getMaturidade(empresaIdAtiva);
+  const ultimaAvaliacao = avaliacoes[avaliacoes.length - 1];
+  const acoesCabecalho = sessao.role === "admin" ? (
+    <div className="flex flex-wrap items-end justify-end gap-2">
+      <SeletorEmpresaAdmin className="w-full sm:w-72" />
+      <DialogoAvaliacao
+        tipo="maturidade"
+        empresaId={empresaIdAtiva}
+        inicial={
+          ultimaAvaliacao
+            ? {
+                competencia: ultimaAvaliacao.competencia,
+                notas: Object.fromEntries(
+                  ultimaAvaliacao.itens.map((item) => [item.categoria, item.pontuacao]),
+                ),
+              }
+            : undefined
+        }
+      />
+    </div>
+  ) : undefined;
 
   if (avaliacoes.length === 0) {
     return (
@@ -61,7 +76,7 @@ export default async function MaturidadePage({
         <CabecalhoPagina
           titulo="Maturidade empresarial"
           descricao="Pontuação de 0 a 100 por área"
-          acao={<SeletorEmpresaAdmin />}
+          acao={acoesCabecalho}
         />
         <Card>
           <CardBody className="px-5 py-10 text-center text-sm text-muted-foreground">
@@ -94,7 +109,7 @@ export default async function MaturidadePage({
       <CabecalhoPagina
         titulo="Maturidade empresarial"
         descricao={`Pontuação de 0 a 100 por área — leitura de ${competenciaExtenso(atual.competencia)}`}
-        acao={<SeletorEmpresaAdmin />}
+        acao={acoesCabecalho}
       />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

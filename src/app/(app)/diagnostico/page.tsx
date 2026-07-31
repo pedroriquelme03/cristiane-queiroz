@@ -1,23 +1,14 @@
 import { GraficoRadar } from "@/components/graficos/grafico-radar";
 import { SeletorEmpresaAdmin } from "@/components/admin/seletor-empresa-admin";
+import { DialogoAvaliacao } from "@/components/avaliacoes/dialogo-avaliacao";
 import { Badge } from "@/components/ui/badge";
 import { CabecalhoPagina } from "@/components/ui/cabecalho-pagina";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Progresso } from "@/components/ui/progresso";
+import { ROTULO_AREA } from "@/lib/avaliacoes";
 import { getDiagnosticos } from "@/lib/dados";
 import { competenciaExtenso } from "@/lib/format";
-import type { AreaDiagnostico } from "@/lib/types";
-
-const ROTULO_AREA: Record<AreaDiagnostico, string> = {
-  financeiro: "Financeiro",
-  compras: "Compras",
-  estoque: "Estoque",
-  comercial: "Comercial",
-  rh: "RH",
-  processos: "Processos",
-  tecnologia: "Tecnologia",
-  gestao: "Gestão",
-};
+import { getSessao } from "@/lib/sessao";
 
 /** Faixas de leitura da nota, para o gestor saber o que fazer com ela. */
 function faixa(nota: number) {
@@ -32,9 +23,40 @@ export default async function DiagnosticoPage({
 }: {
   searchParams: Promise<{ empresa?: string | string[] }>;
 }) {
-  const { empresa: empresaParam } = await searchParams;
+  const [{ empresa: empresaParam }, sessao] = await Promise.all([
+    searchParams,
+    getSessao(),
+  ]);
   const empresaId = typeof empresaParam === "string" ? empresaParam : undefined;
-  const diagnosticos = await getDiagnosticos(empresaId);
+  const empresaIdAtiva = sessao.role === "admin" ? empresaId : sessao.empresaId;
+  const diagnosticos = await getDiagnosticos(empresaIdAtiva);
+  const ultimoDiagnostico = diagnosticos[diagnosticos.length - 1];
+  const acoesCabecalho = sessao.role === "admin" ? (
+    <div className="flex flex-wrap items-end justify-end gap-2">
+      <SeletorEmpresaAdmin className="w-full sm:w-72" />
+      <DialogoAvaliacao
+        tipo="diagnostico"
+        empresaId={empresaIdAtiva}
+        inicial={
+          ultimoDiagnostico
+            ? {
+                competencia: ultimoDiagnostico.competencia,
+                observacoes: ultimoDiagnostico.observacoes,
+                notas: Object.fromEntries(
+                  ultimoDiagnostico.itens.map((item) => [item.categoria, item.nota]),
+                ),
+                observacoesAreas: Object.fromEntries(
+                  ultimoDiagnostico.itens.map((item) => [
+                    item.categoria,
+                    item.observacao,
+                  ]),
+                ),
+              }
+            : undefined
+        }
+      />
+    </div>
+  ) : undefined;
 
   if (diagnosticos.length === 0) {
     return (
@@ -42,7 +64,7 @@ export default async function DiagnosticoPage({
         <CabecalhoPagina
           titulo="Diagnóstico empresarial"
           descricao="Avaliação por área"
-          acao={<SeletorEmpresaAdmin />}
+          acao={acoesCabecalho}
         />
         <Card>
           <CardBody className="px-5 py-10 text-center text-sm text-muted-foreground">
@@ -74,7 +96,7 @@ export default async function DiagnosticoPage({
       <CabecalhoPagina
         titulo="Diagnóstico empresarial"
         descricao={`Avaliação por área — última leitura em ${competenciaExtenso(atual.competencia)}`}
-        acao={<SeletorEmpresaAdmin />}
+        acao={acoesCabecalho}
       />
 
       <div className="grid gap-6 lg:grid-cols-2">

@@ -2,6 +2,8 @@
  * Sessão do usuário atual. A empresa ativa vem de empresa_membros, que é a
  * fonte de verdade do vínculo entre usuários e clientes.
  */
+import { cache } from "react";
+
 import { createClient } from "@/lib/supabase/server";
 import type { Papel } from "@/lib/types";
 
@@ -14,7 +16,7 @@ export interface Sessao {
   empresaId: string;
 }
 
-export async function getSessao(): Promise<Sessao> {
+export const getSessao = cache(async (): Promise<Sessao> => {
   const supabase = await createClient();
 
   // 1. Obter usuário autenticado
@@ -60,7 +62,7 @@ export async function getSessao(): Promise<Sessao> {
     role: profile.role as Papel,
     empresaId: vinculo?.empresa_id ?? "",
   };
-}
+});
 
 export function ehAdmin(sessao: Sessao) {
   return sessao.role === "admin";
