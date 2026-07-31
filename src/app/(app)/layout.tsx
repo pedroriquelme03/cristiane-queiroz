@@ -3,20 +3,25 @@ import type { ReactNode } from "react";
 import { GuardaAssinatura } from "@/components/assinatura/guarda-assinatura";
 import { BarraLateral } from "@/components/layout/barra-lateral";
 import { BarraTopo } from "@/components/layout/barra-topo";
-import { getEstadoAssinaturaAtual } from "@/lib/dados-assinatura";
+import { calcularEstado } from "@/lib/assinatura";
+import { getAssinaturaEmpresa } from "@/lib/dados-assinatura";
 import { getSessao } from "@/lib/sessao";
 
 /** Shell autenticado: tudo que fica atrás do login mora neste grupo. */
 export default async function AppLayout({ children }: { children: ReactNode }) {
-  const [sessao, estado] = await Promise.all([
-    getSessao(),
-    getEstadoAssinaturaAtual(),
-  ]);
+  const sessao = await getSessao();
+  const assinatura = sessao.role === "admin" || !sessao.empresaId
+    ? null
+    : await getAssinaturaEmpresa(sessao.empresaId);
+  const estado = assinatura
+    ? calcularEstado(assinatura.assinatura, assinatura.faturas)
+    : null;
+  const plano = assinatura?.plano ?? null;
 
   return (
     <div className="flex h-dvh">
       <div className="hidden md:block">
-        <BarraLateral role={sessao.role} />
+        <BarraLateral role={sessao.role} plano={plano} />
       </div>
       <div className="flex min-w-0 flex-1 flex-col">
         <BarraTopo />
@@ -26,7 +31,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
             {sessao.role === "admin" ? (
               children
             ) : (
-              <GuardaAssinatura estado={estado}>{children}</GuardaAssinatura>
+              <GuardaAssinatura estado={estado} plano={plano}>{children}</GuardaAssinatura>
             )}
           </div>
         </main>

@@ -71,6 +71,9 @@ export default async function ReunioesPage() {
                   <article className="min-w-0 flex-1 pb-1">
                     <header className="flex flex-wrap items-center gap-2">
                       <h3 className="text-sm font-medium">{registro.titulo}</h3>
+                      {registro.empresaNome ? (
+                        <Badge tom="neutro">{registro.empresaNome}</Badge>
+                      ) : null}
                       <Badge tom={registro.tipo === "treinamento" ? "marca" : "neutro"}>
                         {registro.tipo === "treinamento" ? "Treinamento" : "Reunião"}
                       </Badge>

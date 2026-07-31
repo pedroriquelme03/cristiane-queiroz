@@ -1,4 +1,5 @@
 import { GraficoRadar } from "@/components/graficos/grafico-radar";
+import { SeletorEmpresaAdmin } from "@/components/admin/seletor-empresa-admin";
 import { Badge } from "@/components/ui/badge";
 import { CabecalhoPagina } from "@/components/ui/cabecalho-pagina";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
@@ -26,8 +27,32 @@ function faixa(nota: number) {
   return { rotulo: "Crítico", tom: "negativo" as const };
 }
 
-export default async function DiagnosticoPage() {
-  const diagnosticos = await getDiagnosticos();
+export default async function DiagnosticoPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ empresa?: string | string[] }>;
+}) {
+  const { empresa: empresaParam } = await searchParams;
+  const empresaId = typeof empresaParam === "string" ? empresaParam : undefined;
+  const diagnosticos = await getDiagnosticos(empresaId);
+
+  if (diagnosticos.length === 0) {
+    return (
+      <>
+        <CabecalhoPagina
+          titulo="Diagnóstico empresarial"
+          descricao="Avaliação por área"
+          acao={<SeletorEmpresaAdmin />}
+        />
+        <Card>
+          <CardBody className="px-5 py-10 text-center text-sm text-muted-foreground">
+            Nenhum diagnóstico cadastrado para esta empresa.
+          </CardBody>
+        </Card>
+      </>
+    );
+  }
+
   const inicial = diagnosticos[0];
   const atual = diagnosticos[diagnosticos.length - 1];
 
@@ -49,6 +74,7 @@ export default async function DiagnosticoPage() {
       <CabecalhoPagina
         titulo="Diagnóstico empresarial"
         descricao={`Avaliação por área — última leitura em ${competenciaExtenso(atual.competencia)}`}
+        acao={<SeletorEmpresaAdmin />}
       />
 
       <div className="grid gap-6 lg:grid-cols-2">

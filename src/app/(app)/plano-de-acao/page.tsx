@@ -1,3 +1,4 @@
+import { SeletorEmpresaAdmin } from "@/components/admin/seletor-empresa-admin";
 import { Badge, type TomBadge } from "@/components/ui/badge";
 import { CabecalhoPagina } from "@/components/ui/cabecalho-pagina";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
@@ -55,8 +56,14 @@ function estaAtrasada(acao: PlanoAcao) {
   );
 }
 
-export default async function PlanoDeAcaoPage() {
-  const acoes = await getPlanosAcao();
+export default async function PlanoDeAcaoPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ empresa?: string | string[] }>;
+}) {
+  const { empresa: empresaParam } = await searchParams;
+  const empresaId = typeof empresaParam === "string" ? empresaParam : undefined;
+  const acoes = await getPlanosAcao(empresaId);
 
   const concluidas = acoes.filter((a) => a.status === "concluido");
   const emAndamento = acoes.filter((a) => a.status === "em_andamento");
@@ -73,6 +80,7 @@ export default async function PlanoDeAcaoPage() {
       <CabecalhoPagina
         titulo="Plano de ação"
         descricao="Acompanhamento das ações propostas pela consultoria"
+        acao={<SeletorEmpresaAdmin />}
       />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

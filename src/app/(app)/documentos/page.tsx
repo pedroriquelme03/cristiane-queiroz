@@ -1,5 +1,6 @@
 import { Download, FileText } from "lucide-react";
 
+import { SeletorEmpresaAdmin } from "@/components/admin/seletor-empresa-admin";
 import { Badge } from "@/components/ui/badge";
 import { CabecalhoPagina } from "@/components/ui/cabecalho-pagina";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
@@ -22,8 +23,14 @@ const ORDEM: Documento["categoria"][] = [
   "procedimento", "apresentacao", "outros",
 ];
 
-export default async function DocumentosPage() {
-  const documentos = await getDocumentos();
+export default async function DocumentosPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ empresa?: string | string[] }>;
+}) {
+  const { empresa: empresaParam } = await searchParams;
+  const empresaId = typeof empresaParam === "string" ? empresaParam : undefined;
+  const documentos = await getDocumentos(empresaId);
 
   const porCategoria = ORDEM.map((categoria) => ({
     categoria,
@@ -35,6 +42,7 @@ export default async function DocumentosPage() {
       <CabecalhoPagina
         titulo="Documentos"
         descricao={`${documentos.length} arquivos centralizados`}
+        acao={<SeletorEmpresaAdmin />}
       />
 
       <div className="grid gap-6 lg:grid-cols-2">

@@ -5,10 +5,16 @@ import { Kpi } from "@/components/ui/kpi";
 import { getPlanoContas, getTitulos, statusEfetivo } from "@/lib/dados";
 import { moeda, percentual } from "@/lib/format";
 
-export default async function ContasAReceberPage() {
+export default async function ContasAReceberPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ empresa?: string | string[] }>;
+}) {
+  const { empresa } = await searchParams;
+  const empresaId = typeof empresa === "string" ? empresa : undefined;
   const [titulos, contas] = await Promise.all([
-    getTitulos("receber"),
-    getPlanoContas(),
+    getTitulos("receber", empresaId),
+    getPlanoContas(empresaId),
   ]);
 
   const abertos = titulos.filter((t) => statusEfetivo(t) === "aberto");
@@ -83,20 +89,26 @@ export default async function ContasAReceberPage() {
           descricao="Quanto do saldo em aberto está em cada cliente"
         />
         <CardBody className="space-y-2.5">
-          {ranking.map(([cliente, valor]) => (
-            <div key={cliente} className="flex items-center gap-3">
-              <span className="w-52 shrink-0 truncate text-sm">{cliente}</span>
-              <div className="h-2 flex-1 overflow-hidden rounded-full bg-surface-muted">
-                <div
-                  className="h-full rounded-full bg-brand"
-                  style={{ width: `${(valor / ranking[0][1]) * 100}%` }}
-                />
+          {ranking.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              Nenhum recebimento em aberto.
+            </p>
+          ) : (
+            ranking.map(([cliente, valor]) => (
+              <div key={cliente} className="flex items-center gap-3">
+                <span className="w-52 shrink-0 truncate text-sm">{cliente}</span>
+                <div className="h-2 flex-1 overflow-hidden rounded-full bg-surface-muted">
+                  <div
+                    className="h-full rounded-full bg-brand"
+                    style={{ width: `${(valor / ranking[0][1]) * 100}%` }}
+                  />
+                </div>
+                <span className="tabular w-28 shrink-0 text-right text-sm font-medium">
+                  {moeda(valor)}
+                </span>
               </div>
-              <span className="tabular w-28 shrink-0 text-right text-sm font-medium">
-                {moeda(valor)}
-              </span>
-            </div>
-          ))}
+            ))
+          )}
         </CardBody>
       </Card>
     </>

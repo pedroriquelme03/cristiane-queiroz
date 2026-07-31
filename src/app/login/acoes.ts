@@ -78,13 +78,49 @@ export async function entrar(
 
   if (error) return { erro: traduzirErro(error.message), email: emailDigitado };
 
-  // O destino vem da querystring que o middleware montou ao barrar a rota
-  const destino = String(formData.get("redirect") || "/");
-  // Só caminhos internos: um redirect aberto viraria vetor de phishing
-  const seguro = destino.startsWith("/") && !destino.startsWith("//") ? destino : "/";
-
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  
+  if (!user) {
+    return {
+      erro: "Não foi possível carregar o usuário autenticado.",
+      email: emailDigitado,
+    };
+  }
+  
+  const { data: perfil, error: erroPerfil } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+  
+  if (erroPerfil || !perfil) {
+    await supabase.auth.signOut();
+  
+    return {
+      erro: "Seu usuário não possui um perfil configurado no sistema.",
+      email: emailDigitado,
+    };
+  }
+  
+  const destinoSolicitado = String(formData.get("redirect") || "/");
+  
+  const destinoSeguro =
+    destinoSolicitado.startsWith("/") &&
+    !destinoSolicitado.startsWith("//")
+      ? destinoSolicitado
+      : "/";
+  
+  const destinoFinal =
+    destinoSeguro !== "/"
+      ? destinoSeguro
+      : perfil.role === "admin"
+        ? "/admin"
+        : "/";
+  
   revalidatePath("/", "layout");
-  redirect(seguro);
+  redirect(destinoFinal);
 }
 
 export async function sair() {

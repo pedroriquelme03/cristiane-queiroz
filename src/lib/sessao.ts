@@ -1,12 +1,8 @@
 /**
- * Sessão do usuário atual. Fronteira única: hoje devolve um mock; quando o
- * Supabase existir, lê o profile + empresa da sessão autenticada.
- *
- * Na demonstração o papel é 'admin' (super admin da CQ), para que o painel de
- * administração e todas as telas fiquem visíveis. Trocar para 'cliente' mostra
- * a plataforma na perspectiva do tenant.
+ * Sessão do usuário atual. A empresa ativa vem de empresa_membros, que é a
+ * fonte de verdade do vínculo entre usuários e clientes.
  */
-import { EMPRESA } from "@/lib/mock/gerador";
+import { createClient } from "@/lib/supabase/server";
 import type { Papel } from "@/lib/types";
 
 export interface Sessao {
@@ -14,21 +10,56 @@ export interface Sessao {
   nome: string;
   email: string;
   role: Papel;
-  /** Empresa (tenant) que a sessão está visualizando. */
+  /** Empresa (tenant) vinculada ao usuário. Vazio somente enquanto o vínculo não foi criado. */
   empresaId: string;
 }
 
-const SESSAO_MOCK: Sessao = {
-  usuarioId: "user-cq",
-  nome: "Cristiane Queiroz",
-  email: "cristiane@cqconsultoria.com.br",
-  role: "admin",
-  empresaId: EMPRESA.id,
-};
-
 export async function getSessao(): Promise<Sessao> {
-  // TODO(supabase): ler profiles.role e a empresa ativa da sessão.
-  return SESSAO_MOCK;
+  const supabase = await createClient();
+
+  // 1. Obter usuário autenticado
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (userError || !user) {
+    throw new Error("Usuário não autenticado");
+  }
+
+  // 2. Buscar o perfil. O trigger do banco normalmente já o cria no signup.
+  const { data: profileExistente, error: profileError } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  // 3. Se não existir, criar um perfil padrão sem empresa fictícia.
+  let profile = profileExistente;
+  if (profileError || !profile) {
+    const { data: inserted, error: insertError } = await supabase
+      .from("profiles")
+      .insert({ id: user.id, role: "cliente" })
+      .select("role")
+      .single();
+
+    if (insertError || !inserted) {
+      throw new Error("Não foi possível criar o perfil");
+    }
+    profile = inserted;
+  }
+
+  const { data: vinculo } = await supabase
+    .from("empresa_membros")
+    .select("empresa_id")
+    .eq("user_id", user.id)
+    .limit(1)
+    .maybeSingle();
+
+  // 4. Retornar a sessão
+  return {
+    usuarioId: user.id,
+    nome: user.user_metadata?.nome || user.email || "Usuário",
+    email: user.email!,
+    role: profile.role as Papel,
+    empresaId: vinculo?.empresa_id ?? "",
+  };
 }
 
 export function ehAdmin(sessao: Sessao) {

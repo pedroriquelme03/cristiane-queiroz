@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { CheckCircle2, Info, Lock, Settings2, Unlock } from "lucide-react";
 
@@ -220,7 +220,17 @@ function SecaoBloqueio({ tenant }: { tenant: TenantAssinatura }) {
     (_prev, formData) => alternarBloqueio(formData),
     {},
   );
-  const bloqueado = tenant.assinatura.bloqueioManual;
+  const [bloqueado, setBloqueado] = useState(tenant.assinatura.bloqueioManual);
+  const [proximoEstado, setProximoEstado] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (estado.ok && proximoEstado !== null) {
+      setBloqueado(proximoEstado);
+      setProximoEstado(null);
+    }
+  }, [estado.ok, proximoEstado]);
+
+  const acaoBloqueio = bloqueado ? "desbloquear" : "bloquear";
 
   return (
     <section className="border-t border-border pt-4">
@@ -238,6 +248,8 @@ function SecaoBloqueio({ tenant }: { tenant: TenantAssinatura }) {
           <input type="hidden" name="bloquear" value={bloqueado ? "false" : "true"} />
           <button
             type="submit"
+            onClick={() => setProximoEstado(!bloqueado)}
+            aria-label={bloqueado ? "Desbloquear acesso do cliente" : "Bloquear acesso do cliente"}
             className={
               bloqueado
                 ? "flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-surface-muted"
@@ -258,6 +270,10 @@ function SecaoBloqueio({ tenant }: { tenant: TenantAssinatura }) {
       </div>
       {estado.erro ? (
         <p className="mt-2 text-xs text-muted-foreground">{estado.erro}</p>
+      ) : estado.ok ? (
+        <p className="mt-2 text-xs text-positive">
+          Acesso {acaoBloqueio === "bloquear" ? "desbloqueado" : "bloqueado"}.
+        </p>
       ) : null}
     </section>
   );

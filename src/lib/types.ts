@@ -157,6 +157,7 @@ export interface Reuniao {
   participantes: string;
   ata: string;
   gravacaoUrl: string | null;
+  empresaNome?: string;
 }
 
 export interface Alerta {

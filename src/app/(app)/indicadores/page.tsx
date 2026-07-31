@@ -1,27 +1,38 @@
 import { GraficoIndicador } from "@/components/graficos/grafico-indicador";
+import { SeletorEmpresaAdmin } from "@/components/admin/seletor-empresa-admin";
 import { Badge } from "@/components/ui/badge";
 import { CabecalhoPagina } from "@/components/ui/cabecalho-pagina";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { getEmpresa, getIndicadores } from "@/lib/dados";
 import { percentual, valorIndicador } from "@/lib/format";
 
-export default async function IndicadoresPage() {
-  const [indicadores, empresa] = await Promise.all([getIndicadores(), getEmpresa()]);
+export default async function IndicadoresPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ empresa?: string | string[] }>;
+}) {
+  const { empresa: empresaParam } = await searchParams;
+  const empresaId = typeof empresaParam === "string" ? empresaParam : undefined;
+  const [indicadores, empresa] = await Promise.all([
+    getIndicadores(empresaId),
+    getEmpresa(empresaId),
+  ]);
 
   return (
     <>
       <CabecalhoPagina
         titulo="Indicadores"
         descricao={`Painel de ${indicadores.length} indicadores, personalizados para o segmento de ${empresa.segmento}`}
+        acao={<SeletorEmpresaAdmin />}
       />
 
       <div className="grid gap-6 xl:grid-cols-2">
         {indicadores.map((indicador) => {
           const serie = indicador.valores;
-          const primeiro = serie[0].valor;
-          const atual = serie[serie.length - 1].valor;
-          const meta = serie[serie.length - 1].meta;
-          const variacao = ((atual - primeiro) / Math.abs(primeiro)) * 100;
+          const primeiro = serie[0]?.valor ?? 0;
+          const atual = serie[serie.length - 1]?.valor ?? 0;
+          const meta = serie[serie.length - 1]?.meta ?? null;
+          const variacao = primeiro !== 0 ? ((atual - primeiro) / Math.abs(primeiro)) * 100 : 0;
 
           const favoravel =
             indicador.direcaoMeta === "maior_melhor"
@@ -49,16 +60,24 @@ export default async function IndicadoresPage() {
                 }
               />
               <CardBody>
-                <div className="mb-3 flex items-baseline gap-3">
-                  <span className="text-2xl font-semibold tracking-tight">
-                    {valorIndicador(atual, indicador.unidade)}
-                  </span>
-                  <Badge tom={favoravel ? "positivo" : "negativo"}>
-                    {variacao >= 0 ? "+" : ""}
-                    {percentual(variacao)} em 12 meses
-                  </Badge>
-                </div>
-                <GraficoIndicador indicador={indicador} />
+                {serie.length === 0 ? (
+                  <p className="py-8 text-center text-sm text-muted-foreground">
+                    Nenhum valor lançado para este indicador.
+                  </p>
+                ) : (
+                  <>
+                    <div className="mb-3 flex items-baseline gap-3">
+                      <span className="text-2xl font-semibold tracking-tight">
+                        {valorIndicador(atual, indicador.unidade)}
+                      </span>
+                      <Badge tom={favoravel ? "positivo" : "negativo"}>
+                        {variacao >= 0 ? "+" : ""}
+                        {percentual(variacao)} em 12 meses
+                      </Badge>
+                    </div>
+                    <GraficoIndicador indicador={indicador} />
+                  </>
+                )}
               </CardBody>
             </Card>
           );

@@ -1,16 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 
 import { ORDEM_GRUPOS, ROTULOS_GRUPO, itensVisiveis } from "@/lib/navegacao";
-import type { Papel } from "@/lib/types";
+import type { Papel, Plano } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-export function BarraLateral({ role }: { role: Papel }) {
+export function BarraLateral({
+  role,
+  plano,
+}: {
+  role: Papel;
+  plano?: Pick<Plano, "nome" | "ordem"> | null;
+}) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const empresaSelecionada = searchParams.get("empresa");
 
-  const itens = itensVisiveis(role);
+  const itens = itensVisiveis(role, plano);
   const grupos = ORDEM_GRUPOS.filter((g) => itens.some((i) => i.grupo === g));
 
   const estaAtivo = (href: string) =>
@@ -46,10 +54,17 @@ export function BarraLateral({ role }: { role: Papel }) {
               {itens.filter((item) => item.grupo === grupo).map((item) => {
                 const ativo = estaAtivo(item.href);
                 const Icone = item.icone;
+                const devePropagarEmpresa =
+                  role === "admin" &&
+                  empresaSelecionada &&
+                  ["visao", "gestao", "consultoria"].includes(item.grupo);
+                const href = devePropagarEmpresa
+                  ? `${item.href}?empresa=${encodeURIComponent(empresaSelecionada)}`
+                  : item.href;
                 return (
                   <li key={item.href}>
                     <Link
-                      href={item.href}
+                      href={href}
                       aria-current={ativo ? "page" : undefined}
                       className={cn(
                         "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors",

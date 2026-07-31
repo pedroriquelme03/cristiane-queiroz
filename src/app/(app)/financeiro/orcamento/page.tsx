@@ -8,10 +8,16 @@ import { cn } from "@/lib/utils";
 /** Tolerância antes de a conta ser tratada como desvio relevante. */
 const TOLERANCIA = 0.1;
 
-export default async function OrcamentoPage() {
+export default async function OrcamentoPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ empresa?: string | string[] }>;
+}) {
+  const { empresa } = await searchParams;
+  const empresaId = typeof empresa === "string" ? empresa : undefined;
   const competencia = await getCompetenciaAtual();
   const { inicio, fim } = intervaloDoMes(competencia);
-  const linhas = (await getDre(inicio, fim)).filter(
+  const linhas = (await getDre(inicio, fim, empresaId)).filter(
     (l) => l.realizado !== 0 || l.previsto !== 0,
   );
 
