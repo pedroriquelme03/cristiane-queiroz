@@ -1,8 +1,9 @@
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 
 import { GuardaAssinatura } from "@/components/assinatura/guarda-assinatura";
 import { BarraLateral } from "@/components/layout/barra-lateral";
 import { BarraTopo } from "@/components/layout/barra-topo";
+import { AvisoSolicitacaoReuniaoAdmin } from "@/components/reunioes/aviso-solicitacao-admin";
 import { calcularEstado } from "@/lib/assinatura";
 import { getAssinaturaEmpresa } from "@/lib/dados-assinatura";
 import { getSessao } from "@/lib/sessao";
@@ -19,14 +20,19 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const plano = assinatura?.plano ?? null;
 
   return (
-    <div className="flex h-dvh">
-      <div className="hidden md:block">
+    <div className="flex min-h-dvh">
+      <div className="sticky top-0 hidden h-dvh md:block">
         <BarraLateral role={sessao.role} plano={plano} />
       </div>
       <div className="flex min-w-0 flex-1 flex-col">
         <BarraTopo />
-        <main className="flex-1 overflow-y-auto px-6 py-6">
+        <main className="flex-1 px-6 py-6">
           <div className="mx-auto max-w-7xl space-y-6">
+            {sessao.role === "admin" ? (
+              <Suspense fallback={null}>
+                <AvisoSolicitacaoReuniaoAdmin />
+              </Suspense>
+            ) : null}
             {/* Super admin nunca é barrado: precisa gerenciar as assinaturas */}
             {sessao.role === "admin" ? (
               children

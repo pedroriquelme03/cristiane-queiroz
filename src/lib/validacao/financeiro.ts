@@ -25,8 +25,33 @@ const valorMonetario = z
 const dataIso = z
   .string()
   .trim()
-  .min(1, "Informe a data")
-  .regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida");
+  .superRefine((valor, ctx) => {
+    if (!valor) {
+      ctx.addIssue({ code: "custom", message: "Informe a data" });
+      return;
+    }
+    const data = new Date(`${valor}T12:00:00Z`);
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(valor) ||
+      Number.isNaN(data.getTime()) ||
+      data.toISOString().slice(0, 10) !== valor
+    ) ctx.addIssue({ code: "custom", message: "Data inválida" });
+  });
+
+const dataIsoOpcional = z
+  .string()
+  .trim()
+  .optional()
+  .transform((valor) => (valor === "" ? undefined : valor))
+  .refine((valor) => {
+    if (!valor) return true;
+    const data = new Date(`${valor}T12:00:00Z`);
+    return (
+      /^\d{4}-\d{2}-\d{2}$/.test(valor) &&
+      !Number.isNaN(data.getTime()) &&
+      data.toISOString().slice(0, 10) === valor
+    );
+  }, "Data inválida");
 
 const textoOpcional = z
   .string()
@@ -51,7 +76,7 @@ export const esquemaTitulo = z
     tipo: z.enum(["pagar", "receber"], { message: "Selecione pagar ou receber" }),
     contraparte: z.string().trim().min(1, "Informe o cliente ou fornecedor").max(200),
     vencimento: dataIso,
-    emissao: z.string().trim().optional().transform((v) => (v === "" ? undefined : v)),
+    emissao: dataIsoOpcional,
     valor: valorMonetario.refine((v) => v > 0, "O valor deve ser maior que zero"),
     valorPago: z
       .string()

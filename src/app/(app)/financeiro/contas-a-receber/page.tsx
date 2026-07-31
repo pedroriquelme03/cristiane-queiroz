@@ -4,20 +4,23 @@ import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Kpi } from "@/components/ui/kpi";
 import { getPlanoContas, getTitulos, statusEfetivo } from "@/lib/dados";
 import { moeda, percentual } from "@/lib/format";
+import { getSessao } from "@/lib/sessao";
 
 export default async function ContasAReceberPage({
   searchParams,
 }: {
   searchParams: Promise<{ empresa?: string | string[] }>;
 }) {
-  const { empresa } = await searchParams;
+  const [{ empresa }, sessao] = await Promise.all([searchParams, getSessao()]);
   const empresaId = typeof empresa === "string" ? empresa : undefined;
+  const empresaIdAtiva = sessao.role === "admin" ? empresaId : sessao.empresaId;
+  const podeEditar = Boolean(empresaIdAtiva) && (sessao.role === "admin" || sessao.role === "cliente");
   const [titulos, contas] = await Promise.all([
-    getTitulos("receber", empresaId),
-    getPlanoContas(empresaId),
+    getTitulos("receber", empresaIdAtiva),
+    getPlanoContas(empresaIdAtiva),
   ]);
 
-  const abertos = titulos.filter((t) => statusEfetivo(t) === "aberto");
+  const abertos = titulos.filter((t) => ["aberto", "parcial"].includes(statusEfetivo(t)));
   const vencidos = titulos.filter((t) => statusEfetivo(t) === "vencido");
   const recebidos = titulos.filter((t) => t.status === "pago");
 
@@ -67,7 +70,7 @@ export default async function ContasAReceberPage({
             descricao="Títulos vencidos — acionar a régua de cobrança"
           />
           <CardBody className="px-0 py-0">
-            <TabelaTitulos titulos={vencidos} rotuloContraparte="Cliente" />
+            <TabelaTitulos titulos={vencidos} rotuloContraparte="Cliente" contas={contas} empresaId={empresaIdAtiva} podeEditar={podeEditar} />
           </CardBody>
         </Card>
       ) : null}
@@ -76,10 +79,10 @@ export default async function ContasAReceberPage({
         <CardHeader
           titulo="Recebimentos previstos"
           descricao="Ordenados por vencimento"
-          acao={<DialogoTitulo tipo="receber" contas={contas} />}
+          acao={podeEditar ? <DialogoTitulo tipo="receber" contas={contas} empresaId={empresaIdAtiva} /> : null}
         />
         <CardBody className="px-0 py-0">
-          <TabelaTitulos titulos={abertos} rotuloContraparte="Cliente" />
+          <TabelaTitulos titulos={abertos} rotuloContraparte="Cliente" contas={contas} empresaId={empresaIdAtiva} podeEditar={podeEditar} />
         </CardBody>
       </Card>
 
@@ -109,6 +112,13 @@ export default async function ContasAReceberPage({
               </div>
             ))
           )}
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader titulo="Histórico de recebimentos" descricao="Títulos já liquidados" />
+        <CardBody className="px-0 py-0">
+          <TabelaTitulos titulos={recebidos} rotuloContraparte="Cliente" contas={contas} empresaId={empresaIdAtiva} podeEditar={podeEditar} />
         </CardBody>
       </Card>
     </>

@@ -10,6 +10,11 @@ const SEGMENTOS: Segmento[] = ["geral", "hotelaria", "comercio", "servicos", "in
 const REGIMES: RegimeTributario[] = ["simples", "presumido", "real", "mei"];
 const TIPOS_UNIDADE = ["matriz", "filial", "cd", "loja"];
 
+export interface EstadoFormularioEstrutura {
+  ok?: boolean;
+  erro?: string;
+}
+
 async function validarPodeEditarEmpresa(empresaId: string) {
   const sessao = await getSessao();
   if (sessao.role === "admin") return sessao;
@@ -24,6 +29,34 @@ function revalidarEmpresa(empresaId: string) {
   revalidatePath(`/admin/empresas/${empresaId}/estrutura`);
 }
 
+async function totalPosicoesCadastradas(empresaId: string) {
+  const { data, error } = await supabaseAdmin
+    .from("estrutura_cargos")
+    .select("quantidade")
+    .eq("empresa_id", empresaId);
+
+  if (error) throw new Error("Não foi possível conferir os cargos da empresa.");
+  return (data ?? []).reduce((total, cargo) => total + cargo.quantidade, 0);
+}
+
+async function garantirTotalMinimoDeColaboradores(empresaId: string) {
+  const [totalPosicoes, empresaResultado] = await Promise.all([
+    totalPosicoesCadastradas(empresaId),
+    supabaseAdmin.from("empresas").select("qtd_funcionarios").eq("id", empresaId).single(),
+  ]);
+
+  if (empresaResultado.error) throw new Error("Não foi possível conferir os colaboradores da empresa.");
+  const totalAtual = empresaResultado.data.qtd_funcionarios ?? 0;
+  if (totalAtual >= totalPosicoes) return;
+
+  const { error } = await supabaseAdmin
+    .from("empresas")
+    .update({ qtd_funcionarios: totalPosicoes })
+    .eq("id", empresaId);
+
+  if (error) throw new Error("Não foi possível atualizar o total de colaboradores.");
+}
+
 export async function salvarCadastroEmpresa(empresaId: string, formData: FormData) {
   await validarPodeEditarEmpresa(empresaId);
 
@@ -33,15 +66,20 @@ export async function salvarCadastroEmpresa(empresaId: string, formData: FormDat
   const segmento = String(formData.get("segmento") ?? "geral") as Segmento;
   const regimeTributario = String(formData.get("regime_tributario") ?? "simples") as RegimeTributario;
   const dataAbertura = String(formData.get("data_abertura") ?? "").trim() || null;
-  const qtdFuncionarios = Number(formData.get("qtd_funcionarios") ?? 0);
+  const qtdFuncionariosInformada = Number(formData.get("qtd_funcionarios") ?? 0);
 
   if (!razaoSocial || !nomeFantasia) throw new Error("Informe razão social e nome fantasia.");
   if (!/^\d{14}$/.test(cnpj)) throw new Error("O CNPJ deve conter exatamente 14 números.");
   if (!SEGMENTOS.includes(segmento)) throw new Error("Segmento inválido.");
   if (!REGIMES.includes(regimeTributario)) throw new Error("Regime tributário inválido.");
-  if (!Number.isInteger(qtdFuncionarios) || qtdFuncionarios < 0) {
+  if (!Number.isInteger(qtdFuncionariosInformada) || qtdFuncionariosInformada < 0) {
     throw new Error("Informe uma quantidade de funcionários válida.");
   }
+
+  const qtdFuncionarios = Math.max(
+    qtdFuncionariosInformada,
+    await totalPosicoesCadastradas(empresaId),
+  );
 
   const { error } = await supabaseAdmin
     .from("empresas")
@@ -63,11 +101,16 @@ export async function salvarCadastroEmpresa(empresaId: string, formData: FormDat
 
 export async function atualizarColaboradores(empresaId: string, formData: FormData) {
   await validarPodeEditarEmpresa(empresaId);
-  const qtdFuncionarios = Number(formData.get("qtd_funcionarios") ?? 0);
+  const qtdFuncionariosInformada = Number(formData.get("qtd_funcionarios") ?? 0);
 
-  if (!Number.isInteger(qtdFuncionarios) || qtdFuncionarios < 0) {
+  if (!Number.isInteger(qtdFuncionariosInformada) || qtdFuncionariosInformada < 0) {
     throw new Error("Informe uma quantidade de colaboradores válida.");
   }
+
+  const qtdFuncionarios = Math.max(
+    qtdFuncionariosInformada,
+    await totalPosicoesCadastradas(empresaId),
+  );
 
   const { error } = await supabaseAdmin
     .from("empresas")
@@ -133,11 +176,41 @@ export async function adicionarCargo(empresaId: string, areaId: string, formData
   if (!nome || !Number.isInteger(quantidade) || quantidade < 0) {
     throw new Error("Informe um cargo e uma quantidade válida.");
   }
+
+  const { data: area, error: areaError } = await supabaseAdmin
+    .from("estrutura_areas")
+    .select("id")
+    .eq("id", areaId)
+    .eq("empresa_id", empresaId)
+    .maybeSingle();
+
+  if (areaError || !area) throw new Error("A área selecionada não pertence a esta empresa.");
+
   const { error } = await supabaseAdmin
     .from("estrutura_cargos")
-    .insert({ empresa_id: empresaId, area_id: areaId, nome, quantidade });
+    .upsert(
+      { empresa_id: empresaId, area_id: areaId, nome, quantidade },
+      { onConflict: "area_id,nome" },
+  );
   if (error) throw new Error("Não foi possível cadastrar o cargo.");
+  await garantirTotalMinimoDeColaboradores(empresaId);
   revalidarEmpresa(empresaId);
+}
+
+export async function adicionarCargoComEstado(
+  empresaId: string,
+  areaId: string,
+  _estado: EstadoFormularioEstrutura,
+  formData: FormData,
+): Promise<EstadoFormularioEstrutura> {
+  try {
+    await adicionarCargo(empresaId, areaId, formData);
+    return { ok: true };
+  } catch (error) {
+    return {
+      erro: error instanceof Error ? error.message : "Não foi possível salvar o cargo.",
+    };
+  }
 }
 
 export async function removerCargo(empresaId: string, cargoId: string) {

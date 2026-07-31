@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+
+import { SeletorSegmento } from "@/components/admin/seletor-segmento";
 import { createClient as createBrowserClient } from "@/lib/supabase/client";
 
 interface EmpresaForm {
@@ -101,24 +103,7 @@ export function FormEditarEmpresa({ empresa }: { empresa: EmpresaForm }) {
           className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-brand focus:outline-none"
         />
       </div>
-      <div>
-        <label htmlFor="segmento" className="block text-sm font-medium mb-1">
-          Segmento *
-        </label>
-        <select
-          id="segmento"
-          name="segmento"
-          defaultValue={empresa.segmento}
-          required
-          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-brand focus:outline-none"
-        >
-          <option value="hotelaria">Hotelaria</option>
-          <option value="comercio">Comércio</option>
-          <option value="servicos">Serviços</option>
-          <option value="industria">Indústria</option>
-          <option value="alimentacao">Alimentação</option>
-        </select>
-      </div>
+      <SeletorSegmento valorInicial={empresa.segmento} />
 
       {error && <div className="p-3 bg-red-50 text-red-700 rounded-lg">{error}</div>}
 

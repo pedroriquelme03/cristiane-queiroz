@@ -21,17 +21,30 @@ function nomeSegmento(segmento: string | null) {
 
 export default async function EmpresasPage() {
   const supabase = await createClient();
-  const { data: empresas, error } = await supabase
-    .from("empresas")
-    .select("*")
-    .order("nome_fantasia");
+  const [{ data: empresas, error }, { data: membros, error: membrosError }] = await Promise.all([
+    supabase.from("empresas").select("*").order("nome_fantasia"),
+    supabase.from("empresa_membros").select("empresa_id, user_id"),
+  ]);
 
-  if (error) {
+  if (error || membrosError) {
     console.error("Erro ao buscar empresas:", error);
     return <div className="p-4 text-destructive">Erro ao carregar empresas.</div>;
   }
 
   const lista = empresas ?? [];
+  const usuarioIds = [...new Set((membros ?? []).map((membro) => membro.user_id))];
+  const { data: profiles, error: profilesError } = usuarioIds.length
+    ? await supabase.from("profiles").select("id, email").in("id", usuarioIds)
+    : { data: [], error: null };
+  if (profilesError) return <div className="p-4 text-destructive">Erro ao carregar acessos.</div>;
+
+  const emailPorUsuario = new Map((profiles ?? []).map((profile) => [profile.id, profile.email]));
+  const emailsPorEmpresa = new Map<string, string[]>();
+  for (const membro of membros ?? []) {
+    const email = emailPorUsuario.get(membro.user_id);
+    if (!email) continue;
+    emailsPorEmpresa.set(membro.empresa_id, [...(emailsPorEmpresa.get(membro.empresa_id) ?? []), email]);
+  }
   const segmentos = new Set(
     lista.map((empresa) => empresa.segmento).filter(Boolean),
   ).size;
@@ -39,9 +52,9 @@ export default async function EmpresasPage() {
   return (
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-3">
-        <Resumo icone={Building2} rotulo="Usuários cadastrados" valor={lista.length} />
+        <Resumo icone={Building2} rotulo="Empresas cadastradas" valor={lista.length} />
+        <Resumo icone={Users} rotulo="Acessos ativos" valor={usuarioIds.length} />
         <Resumo icone={Tag} rotulo="Segmentos atendidos" valor={segmentos} />
-        <Resumo icone={Users} rotulo="Gestão de clientes" valor="Ativa" />
       </div>
 
       <Card>
@@ -54,7 +67,7 @@ export default async function EmpresasPage() {
               className="inline-flex items-center gap-2 rounded-lg bg-brand px-3 py-2 text-xs font-medium text-brand-foreground hover:opacity-90"
             >
               <Plus className="size-4" />
-              Novo usuário
+              Novo cliente
             </Link>
           }
         />
@@ -65,12 +78,13 @@ export default async function EmpresasPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-2xl text-sm">
+              <table className="w-full min-w-3xl text-sm">
                 <thead>
                   <tr className="border-b border-border text-left text-xs text-muted-foreground">
                     <th className="px-5 py-2.5 font-medium">Usuário / empresa</th>
                     <th className="px-3 py-2.5 font-medium">CNPJ</th>
                     <th className="px-3 py-2.5 font-medium">Segmento</th>
+                    <th className="px-3 py-2.5 font-medium">Acessos</th>
                     <th className="px-5 py-2.5 text-right font-medium">Ação</th>
                   </tr>
                 </thead>
@@ -85,12 +99,21 @@ export default async function EmpresasPage() {
                         {empresa.cnpj ? formatarCnpj(empresa.cnpj) : "—"}
                       </td>
                       <td className="px-3 py-3">{nomeSegmento(empresa.segmento)}</td>
+                      <td className="px-3 py-3">
+                        {(emailsPorEmpresa.get(empresa.id) ?? []).length ? (
+                          <div className="space-y-0.5">
+                            {(emailsPorEmpresa.get(empresa.id) ?? []).map((email) => (
+                              <p key={email} className="text-xs text-muted-foreground">{email}</p>
+                            ))}
+                          </div>
+                        ) : <span className="text-xs text-muted-foreground">Sem acesso</span>}
+                      </td>
                       <td className="px-5 py-3 text-right">
                         <Link
                           href={`/admin/empresas/${empresa.id}`}
                           className="text-xs font-medium text-brand hover:underline"
                         >
-                          Editar
+                          Gerenciar
                         </Link>
                       </td>
                     </tr>

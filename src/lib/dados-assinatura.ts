@@ -2,6 +2,8 @@
  * Fronteira de dados do modulo de assinaturas.
  * As telas leem planos, assinaturas e faturas diretamente do Supabase.
  */
+import { cache } from "react";
+
 import { calcularEstado } from "@/lib/assinatura";
 import { getSessao } from "@/lib/sessao";
 import { supabaseConfigurado } from "@/lib/supabase/config";
@@ -19,7 +21,7 @@ import type {
 // Planos
 // ---------------------------------------------------------------------------
 
-export async function getPlanos(): Promise<Plano[]> {
+export const getPlanos = cache(async (): Promise<Plano[]> => {
   const supabase = await criarSupabaseObrigatorio();
   const { data, error } = await supabase
     .from("planos")
@@ -29,14 +31,14 @@ export async function getPlanos(): Promise<Plano[]> {
 
   if (error) throw new Error("Nao foi possivel carregar os planos.");
   return (data ?? []).map(mapPlano);
-}
+});
 
 /** Planos visíveis na vitrine do cliente. */
 export async function getPlanosPublicos(): Promise<Plano[]> {
   return (await getPlanos()).filter((p) => p.publico && p.ativo);
 }
 
-export async function getPlano(id: string): Promise<Plano | null> {
+export const getPlano = cache(async (id: string): Promise<Plano | null> => {
   const supabase = await criarSupabaseObrigatorio();
   const { data, error } = await supabase
     .from("planos")
@@ -46,23 +48,36 @@ export async function getPlano(id: string): Promise<Plano | null> {
 
   if (error) throw new Error("Nao foi possivel carregar o plano.");
   return data ? mapPlano(data) : null;
-}
+});
 
 // ---------------------------------------------------------------------------
 // Assinatura de uma empresa
 // ---------------------------------------------------------------------------
 
-export async function getAssinaturaEmpresa(
+export const getAssinaturaEmpresa = cache(async (
   empresaId: string,
-): Promise<{ assinatura: Assinatura; plano: Plano; faturas: Fatura[] } | null> {
-  const tenant = (await getTenants()).find((t) => t.empresa.id === empresaId);
+): Promise<{ assinatura: Assinatura; plano: Plano; faturas: Fatura[] } | null> => {
+  const supabase = await criarSupabaseObrigatorio();
+  const { data, error } = await supabase
+    .from("assinaturas")
+    .select(`
+      *,
+      empresa:empresas(*),
+      plano:planos(*),
+      faturas(*)
+    `)
+    .eq("empresa_id", empresaId)
+    .maybeSingle();
+
+  if (error) throw new Error("Nao foi possivel carregar a assinatura da empresa.");
+  const tenant = data ? mapTenant(data as unknown as TenantSupabase) : null;
   if (!tenant) return null;
   return {
     assinatura: tenant.assinatura,
     plano: tenant.plano,
     faturas: tenant.faturas,
   };
-}
+});
 
 /** Estado calculado da empresa da sessão atual. Consumido pelo guarda. */
 export async function getEstadoAssinaturaAtual(): Promise<EstadoAssinatura | null> {
@@ -72,7 +87,7 @@ export async function getEstadoAssinaturaAtual(): Promise<EstadoAssinatura | nul
   return calcularEstado(assinatura.assinatura, assinatura.faturas);
 }
 
-export async function getFaturasEmpresa(empresaId: string): Promise<Fatura[]> {
+export const getFaturasEmpresa = cache(async (empresaId: string): Promise<Fatura[]> => {
   const supabase = await criarSupabaseObrigatorio();
   const { data, error } = await supabase
     .from("faturas")
@@ -82,13 +97,13 @@ export async function getFaturasEmpresa(empresaId: string): Promise<Fatura[]> {
 
   if (error) throw new Error("Nao foi possivel carregar as faturas.");
   return (data ?? []).map(mapFatura);
-}
+});
 
 // ---------------------------------------------------------------------------
 // Visão do super admin: carteira de tenants
 // ---------------------------------------------------------------------------
 
-export async function getTenants(): Promise<TenantAssinatura[]> {
+export const getTenants = cache(async (): Promise<TenantAssinatura[]> => {
   const supabase = await criarSupabaseObrigatorio();
   const { data, error } = await supabase
     .from("assinaturas")
@@ -103,24 +118,10 @@ export async function getTenants(): Promise<TenantAssinatura[]> {
   if (error) throw new Error("Nao foi possivel carregar assinaturas.");
   return (data ?? [])
     .flatMap((row) => {
-      const empresa = normalizarJoin(row.empresa) as EmpresaSupabase | null;
-      const plano = normalizarJoin(row.plano) as PlanoSupabase | null;
-      if (!empresa || !plano) return [];
-
-      const assinatura = mapAssinatura(row);
-      const faturas = ((row.faturas ?? []) as FaturaSupabase[])
-        .map(mapFatura)
-        .sort((a, b) => b.vencimento.localeCompare(a.vencimento));
-
-      return {
-        empresa: mapEmpresa(empresa),
-        plano: mapPlano(plano),
-        assinatura,
-        estado: calcularEstado(assinatura, faturas),
-        faturas,
-      };
+      const tenant = mapTenant(row as unknown as TenantSupabase);
+      return tenant ? [tenant] : [];
     });
-}
+});
 
 export interface ResumoAdmin {
   totalTenants: number;
@@ -224,6 +225,12 @@ type FaturaSupabase = {
   observacao: string | null;
 };
 
+type TenantSupabase = AssinaturaSupabase & {
+  empresa: EmpresaSupabase | EmpresaSupabase[] | null;
+  plano: PlanoSupabase | PlanoSupabase[] | null;
+  faturas: FaturaSupabase[] | null;
+};
+
 function numero(valor: number | string | null) {
   return typeof valor === "string" ? Number(valor) : valor ?? 0;
 }
@@ -287,6 +294,25 @@ function mapAssinatura(row: AssinaturaSupabase): Assinatura {
     trialFim: row.trial_fim ? dataIso(row.trial_fim) : null,
     bloqueioManual: row.bloqueio_manual,
     canceladaEm: row.cancelada_em ? dataIso(row.cancelada_em) : null,
+  };
+}
+
+function mapTenant(row: TenantSupabase): TenantAssinatura | null {
+  const empresa = normalizarJoin(row.empresa);
+  const plano = normalizarJoin(row.plano);
+  if (!empresa || !plano) return null;
+
+  const assinatura = mapAssinatura(row);
+  const faturas = (row.faturas ?? [])
+    .map(mapFatura)
+    .sort((a, b) => b.vencimento.localeCompare(a.vencimento));
+
+  return {
+    empresa: mapEmpresa(empresa),
+    plano: mapPlano(plano),
+    assinatura,
+    estado: calcularEstado(assinatura, faturas),
+    faturas,
   };
 }
 

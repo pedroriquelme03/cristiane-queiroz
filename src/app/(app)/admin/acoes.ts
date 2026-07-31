@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { getSessao } from "@/lib/sessao";
 import { supabaseConfigurado } from "@/lib/supabase/config";
 import { createClient } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 import { esquemaPagamento, esquemaPlano } from "@/lib/validacao/assinatura";
 
 export interface EstadoAdmin {
@@ -12,6 +13,7 @@ export interface EstadoAdmin {
   erro?: string;
   campos?: Record<string, string>;
   valores?: Record<string, string>;
+  bloqueado?: boolean;
 }
 
 function errosPorCampo(issues: { path: PropertyKey[]; message: string }[]) {
@@ -78,6 +80,55 @@ export async function excluirPlano(formData: FormData): Promise<EstadoAdmin> {
 // ---------------------------------------------------------------------------
 // Assinaturas dos tenants
 // ---------------------------------------------------------------------------
+
+export async function criarAssinatura(
+  _anterior: EstadoAdmin,
+  formData: FormData,
+): Promise<EstadoAdmin> {
+  const sessao = await getSessao();
+  if (sessao.role !== "admin") return { erro: "Apenas administradores podem vincular planos." };
+
+  const empresaId = String(formData.get("empresaId") ?? "");
+  const planoId = String(formData.get("planoId") ?? "");
+  const ciclo = String(formData.get("ciclo") ?? "mensal");
+  if (!empresaId || !planoId) return { erro: "Selecione a empresa e o plano." };
+  if (ciclo !== "mensal" && ciclo !== "anual") return { erro: "Ciclo inválido." };
+
+  const [{ data: empresa }, { data: plano, error: planoError }, { data: existente }] = await Promise.all([
+    supabaseAdmin.from("empresas").select("id").eq("id", empresaId).maybeSingle(),
+    supabaseAdmin.from("planos").select("id, ativo, trial_dias, preco_anual").eq("id", planoId).maybeSingle(),
+    supabaseAdmin.from("assinaturas").select("id").eq("empresa_id", empresaId).maybeSingle(),
+  ]);
+
+  if (!empresa) return { erro: "Empresa não encontrada." };
+  if (planoError || !plano || !plano.ativo) return { erro: "Plano não encontrado ou inativo." };
+  if (existente) return { erro: "Esta empresa já possui uma assinatura." };
+  if (ciclo === "anual" && plano.preco_anual === null) {
+    return { erro: "Este plano não oferece cobrança anual." };
+  }
+
+  const hoje = new Date();
+  const inicio = hoje.toISOString().slice(0, 10);
+  const trialDias = plano.trial_dias ?? 0;
+  const trialFim = trialDias > 0 ? new Date(hoje) : null;
+  trialFim?.setDate(trialFim.getDate() + trialDias);
+  const { error } = await supabaseAdmin.from("assinaturas").insert({
+    empresa_id: empresaId,
+    plano_id: planoId,
+    ciclo,
+    status: trialDias > 0 ? "trial" : "ativa",
+    inicio,
+    trial_fim: trialFim?.toISOString().slice(0, 10) ?? null,
+    dia_vencimento: Math.min(28, hoje.getDate()),
+  });
+
+  if (error) return { erro: "Não foi possível vincular o plano à empresa." };
+  revalidatePath("/admin/assinaturas");
+  revalidatePath("/admin/gestao");
+  revalidatePath(`/admin/empresas/${empresaId}`);
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
 
 export async function registrarPagamento(
   _anterior: EstadoAdmin,
@@ -159,7 +210,7 @@ export async function alternarBloqueio(formData: FormData): Promise<EstadoAdmin>
 
   revalidatePath("/admin/gestao");
   revalidatePath("/admin/assinaturas");
-  return { ok: true };
+  return { ok: true, bloqueado: bloquear };
 }
 
 function calcularStatusAssinatura({

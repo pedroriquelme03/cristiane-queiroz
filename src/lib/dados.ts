@@ -14,6 +14,7 @@ import type {
   Diagnostico,
   Documento,
   Empresa,
+  HistoricoPlanoAcao,
   Indicador,
   Lancamento,
   LinhaDre,
@@ -188,7 +189,7 @@ export async function getLancamentos(
   const supabase = await criarSupabaseObrigatorio();
   const { data, error } = await supabase
     .from("lancamentos")
-    .select("id, data, tipo, valor, descricao, contraparte, plano_conta_id")
+    .select("id, data, tipo, valor, descricao, contraparte, documento, plano_conta_id, origem")
     .eq("empresa_id", empresaId)
     .gte("data", inicio)
     .lte("data", fim)
@@ -205,7 +206,7 @@ export async function getTitulos(tipo: Titulo["tipo"], empresaIdParam?: string):
   const supabase = await criarSupabaseObrigatorio();
   const { data, error } = await supabase
     .from("titulos")
-    .select("id, tipo, contraparte, documento, emissao, vencimento, valor, valor_pago, status, plano_conta_id")
+    .select("id, tipo, contraparte, documento, emissao, vencimento, valor, valor_pago, data_pagamento, status, plano_conta_id, origem")
     .eq("empresa_id", empresaId)
     .eq("tipo", tipo)
     .order("vencimento");
@@ -243,15 +244,59 @@ export async function getIndicadores(_empresaId?: string): Promise<Indicador[]> 
   if (!empresaId) return [];
 
   const supabase = await criarSupabaseObrigatorio();
-  const { data, error } = await supabase
-    .from("indicadores")
-    .select("id, codigo, nome, descricao, unidade, direcao_meta, indicador_valores(competencia, valor, meta)")
-    .or(`empresa_id.eq.${empresaId},empresa_id.is.null`)
-    .eq("ativo", true)
-    .order("codigo");
+  const { data: empresa, error: empresaError } = await supabase
+    .from("empresas")
+    .select("segmento")
+    .eq("id", empresaId)
+    .single();
+  if (empresaError || !empresa) throw new Error("Nao foi possivel identificar o segmento da empresa.");
 
-  if (error) throw new Error("Nao foi possivel carregar indicadores.");
-  return (data ?? []).map(mapIndicador);
+  const segmentos = empresa.segmento === "geral" ? ["geral"] : ["geral", empresa.segmento];
+  const campos = "id, empresa_id, codigo, nome, descricao, segmento, unidade, direcao_meta";
+  const [templatesResultado, personalizadosResultado] = await Promise.all([
+    supabase
+      .from("indicadores")
+      .select(campos)
+      .is("empresa_id", null)
+      .in("segmento", segmentos)
+      .eq("ativo", true),
+    supabase
+      .from("indicadores")
+      .select(campos)
+      .eq("empresa_id", empresaId)
+      .eq("ativo", true),
+  ]);
+
+  if (templatesResultado.error || personalizadosResultado.error) {
+    throw new Error("Nao foi possivel carregar indicadores.");
+  }
+
+  // Um indicador personalizado com o mesmo código substitui o template.
+  const porCodigo = new Map<string, (typeof templatesResultado.data)[number]>();
+  for (const indicador of templatesResultado.data ?? []) porCodigo.set(indicador.codigo, indicador);
+  for (const indicador of personalizadosResultado.data ?? []) porCodigo.set(indicador.codigo, indicador);
+  const definicoes = [...porCodigo.values()].sort((a, b) => a.codigo.localeCompare(b.codigo));
+  if (!definicoes.length) return [];
+
+  const { data: valores, error: valoresError } = await supabase
+    .from("indicador_valores")
+    .select("indicador_id, competencia, valor, meta")
+    .eq("empresa_id", empresaId)
+    .in("indicador_id", definicoes.map((indicador) => indicador.id))
+    .order("competencia");
+
+  if (valoresError) throw new Error("Nao foi possivel carregar os valores dos indicadores.");
+  const valoresPorIndicador = new Map<string, NonNullable<typeof valores>>();
+  for (const valor of valores ?? []) {
+    const serie = valoresPorIndicador.get(valor.indicador_id) ?? [];
+    serie.push(valor);
+    valoresPorIndicador.set(valor.indicador_id, serie);
+  }
+
+  return definicoes.map((indicador) => mapIndicador({
+    ...indicador,
+    indicador_valores: valoresPorIndicador.get(indicador.id) ?? [],
+  }));
 }
 
 export async function getPlanosAcao(_empresaId?: string): Promise<PlanoAcao[]> {
@@ -269,6 +314,32 @@ export async function getPlanosAcao(_empresaId?: string): Promise<PlanoAcao[]> {
   return (data ?? []).map(mapPlanoAcao);
 }
 
+export async function getHistoricoPlanosAcao(
+  _empresaId?: string,
+): Promise<HistoricoPlanoAcao[]> {
+  const empresaId = await resolverEmpresaId(_empresaId);
+  if (!empresaId) return [];
+
+  const supabase = await criarSupabaseObrigatorio();
+  const { data, error } = await supabase
+    .from("plano_acao_historico")
+    .select("id, plano_acao_id, tipo, descricao, autor_nome, created_at")
+    .eq("empresa_id", empresaId)
+    .order("created_at", { ascending: false })
+    .limit(100);
+
+  // A tela principal continua operacional antes da migration 0011 ser aplicada.
+  if (error) return [];
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    planoAcaoId: row.plano_acao_id,
+    tipo: row.tipo as HistoricoPlanoAcao["tipo"],
+    descricao: row.descricao,
+    autorNome: row.autor_nome,
+    criadoEm: row.created_at,
+  }));
+}
+
 export async function getDiagnosticos(_empresaId?: string): Promise<Diagnostico[]> {
   const empresaId = await resolverEmpresaId(_empresaId);
   if (!empresaId) return [];
@@ -278,7 +349,7 @@ export async function getDiagnosticos(_empresaId?: string): Promise<Diagnostico[
     .from("diagnosticos")
     .select("competencia, observacoes, diagnostico_itens(categoria, nota, observacao)")
     .eq("empresa_id", empresaId)
-    .order("competencia", { ascending: false });
+    .order("competencia");
 
   if (error) throw new Error("Nao foi possivel carregar diagnosticos.");
   return (data ?? []).map(mapDiagnostico);
@@ -320,6 +391,7 @@ export async function getReunioes(_empresaId?: string): Promise<Reuniao[]> {
     .from("reunioes")
     .select(`
       id,
+      empresa_id,
       tipo,
       titulo,
       data,
@@ -342,20 +414,43 @@ export async function getAlertas(empresaIdParam?: string): Promise<Alerta[]> {
   if (!empresaId) return [];
 
   const supabase = await criarSupabaseObrigatorio();
-  const { data, error } = await supabase
-    .from("alertas")
-    .select("id, severidade, titulo, descricao")
-    .eq("empresa_id", empresaId)
-    .eq("resolvido", false)
-    .order("created_at", { ascending: false });
+  const hojeIso = new Date().toISOString();
+  const [{ data, error }, { data: reunioes, error: reunioesError }] = await Promise.all([
+    supabase
+      .from("alertas")
+      .select("id, severidade, titulo, descricao")
+      .eq("empresa_id", empresaId)
+      .eq("resolvido", false)
+      .neq("tipo", "solicitacao_reuniao")
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("reunioes")
+      .select("id, tipo, titulo, data")
+      .eq("empresa_id", empresaId)
+      .gt("data", hojeIso)
+      .order("data")
+      .limit(3),
+  ]);
 
   if (error) throw new Error("Nao foi possivel carregar alertas.");
-  return (data ?? []).map((row) => ({
+  if (reunioesError) throw new Error("Nao foi possivel carregar reunioes agendadas.");
+
+  const alertasReunioes: Alerta[] = (reunioes ?? []).map((reuniao) => ({
+    id: `reuniao-${reuniao.id}`,
+    severidade: "info",
+    titulo: reuniao.tipo === "treinamento" ? "Treinamento agendado" : "Reunião agendada",
+    descricao: `${reuniao.titulo} em ${formatarDataHoraAlerta(reuniao.data)}.`,
+  }));
+
+  return [
+    ...alertasReunioes,
+    ...(data ?? []).map((row) => ({
     id: row.id,
     severidade: row.severidade as Alerta["severidade"],
     titulo: row.titulo,
     descricao: row.descricao ?? "",
-  }));
+    })),
+  ];
 }
 
 // ---------------------------------------------------------------------------
@@ -417,6 +512,7 @@ type EmpresaJoin = {
 
 type ReuniaoSupabase = {
   id: string;
+  empresa_id: string;
   tipo: Reuniao["tipo"];
   titulo: string;
   data: string;
@@ -445,6 +541,14 @@ function numero(valor: number | string | null) {
 
 function dataIso(valor: string | null) {
   return valor ? valor.slice(0, 10) : "";
+}
+
+function formatarDataHoraAlerta(iso: string) {
+  return new Date(iso).toLocaleString("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short",
+    timeZone: "America/Sao_Paulo",
+  });
 }
 
 function mapEmpresa(row: EmpresaSupabase): Empresa {
@@ -514,7 +618,9 @@ function mapLancamento(row: {
   valor: number | string;
   descricao: string;
   contraparte: string | null;
+  documento: string | null;
   plano_conta_id: string | null;
+  origem: Lancamento["origem"];
 }): Lancamento {
   return {
     id: row.id,
@@ -523,7 +629,9 @@ function mapLancamento(row: {
     valor: numero(row.valor),
     descricao: row.descricao,
     contraparte: row.contraparte,
+    documento: row.documento,
     planoContaId: row.plano_conta_id,
+    origem: row.origem,
   };
 }
 
@@ -536,8 +644,10 @@ function mapTitulo(row: {
   vencimento: string;
   valor: number | string;
   valor_pago: number | string;
+  data_pagamento: string | null;
   status: Titulo["status"];
   plano_conta_id: string | null;
+  origem: Titulo["origem"];
 }): Titulo {
   return {
     id: row.id,
@@ -548,8 +658,10 @@ function mapTitulo(row: {
     vencimento: dataIso(row.vencimento),
     valor: numero(row.valor),
     valorPago: numero(row.valor_pago),
+    dataPagamento: row.data_pagamento ? dataIso(row.data_pagamento) : null,
     status: row.status,
     planoContaId: row.plano_conta_id,
+    origem: row.origem,
   };
 }
 
@@ -575,11 +687,13 @@ function mapLinhaDre(row: {
 
 function mapIndicador(row: {
   id: string;
+  empresa_id: string | null;
   codigo: string;
   nome: string;
   descricao: string | null;
   unidade: Indicador["unidade"];
   direcao_meta: Indicador["direcaoMeta"];
+  segmento: Indicador["segmento"];
   indicador_valores?: {
     competencia: string;
     valor: number | string;
@@ -593,6 +707,8 @@ function mapIndicador(row: {
     descricao: row.descricao ?? "",
     unidade: row.unidade,
     direcaoMeta: row.direcao_meta,
+    segmento: row.segmento,
+    personalizado: row.empresa_id !== null,
     valores: (row.indicador_valores ?? [])
       .map((valor) => ({
         competencia: dataIso(valor.competencia),
@@ -698,6 +814,7 @@ function mapReuniao(row: ReuniaoSupabase): Reuniao {
 
   return {
     id: row.id,
+    empresaId: row.empresa_id,
     tipo: row.tipo,
     titulo: row.titulo,
     data: row.data,

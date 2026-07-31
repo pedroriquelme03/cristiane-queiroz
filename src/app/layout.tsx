@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "CQ Consultoria Financeira",
+  title: "Cristiane Queiroz | Consultoria Financeira",
   description:
     "Sistema de gestão empresarial da Consultoria Cristiane Queiroz: indicadores, diagnóstico e plano de ação em um só ambiente.",
 };

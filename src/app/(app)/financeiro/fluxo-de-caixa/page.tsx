@@ -1,4 +1,7 @@
-import { DialogoLancamento } from "@/components/financeiro/dialogo-lancamento";
+import {
+  DialogoLancamento,
+  ExcluirLancamento,
+} from "@/components/financeiro/dialogo-lancamento";
 import { GraficoMovimento } from "@/components/graficos/grafico-movimento";
 import { GraficoSaldo } from "@/components/graficos/grafico-saldo";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
@@ -12,22 +15,25 @@ import {
   intervaloDoMes,
 } from "@/lib/dados";
 import { competenciaExtenso, data as formatarData, moeda } from "@/lib/format";
+import { getSessao } from "@/lib/sessao";
 
 export default async function FluxoDeCaixaPage({
   searchParams,
 }: {
   searchParams: Promise<{ empresa?: string | string[] }>;
 }) {
-  const { empresa } = await searchParams;
+  const [{ empresa }, sessao] = await Promise.all([searchParams, getSessao()]);
   const empresaId = typeof empresa === "string" ? empresa : undefined;
+  const empresaIdAtiva = sessao.role === "admin" ? empresaId : sessao.empresaId;
+  const podeEditar = Boolean(empresaIdAtiva) && (sessao.role === "admin" || sessao.role === "cliente");
   const competencia = await getCompetenciaAtual();
   const { inicio, fim } = intervaloDoMes(competencia);
 
   const [fluxo, projecao, lancamentos, contas] = await Promise.all([
-    getFluxoDiario(inicio, fim, empresaId),
-    getFluxoProjetado(90, empresaId),
-    getLancamentos(inicio, fim, empresaId),
-    getPlanoContas(empresaId),
+    getFluxoDiario(inicio, fim, empresaIdAtiva),
+    getFluxoProjetado(90, empresaIdAtiva),
+    getLancamentos(inicio, fim, empresaIdAtiva),
+    getPlanoContas(empresaIdAtiva),
   ]);
 
   const nomeConta = (id: string | null) =>
@@ -86,7 +92,7 @@ export default async function FluxoDeCaixaPage({
         <CardHeader
           titulo="Lançamentos do período"
           descricao={`${lancamentos.length} movimentações em ${competenciaExtenso(competencia)}`}
-          acao={<DialogoLancamento contas={contas} />}
+          acao={podeEditar ? <DialogoLancamento contas={contas} empresaId={empresaIdAtiva} /> : null}
         />
         <CardBody className="px-0 py-0">
           <div className="max-h-[28rem] overflow-auto">
@@ -98,6 +104,7 @@ export default async function FluxoDeCaixaPage({
                   <th scope="col" className="px-3 py-2.5 text-left font-medium">Classificação</th>
                   <th scope="col" className="px-3 py-2.5 text-left font-medium">Contraparte</th>
                   <th scope="col" className="px-5 py-2.5 text-right font-medium">Valor</th>
+                  {podeEditar ? <th scope="col" className="px-5 py-2.5 text-right font-medium">Ações</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -125,8 +132,27 @@ export default async function FluxoDeCaixaPage({
                         {moeda(l.valor)}
                       </span>
                     </td>
+                    {podeEditar && empresaIdAtiva ? (
+                      <td className="px-5 py-2.5">
+                        {l.origem === "manual" ? (
+                          <div className="flex items-center justify-end gap-3">
+                            <DialogoLancamento contas={contas} empresaId={empresaIdAtiva} lancamento={l} />
+                            <ExcluirLancamento lancamento={l} empresaId={empresaIdAtiva} />
+                          </div>
+                        ) : (
+                          <span className="block text-right text-xs text-muted-foreground">Baixa automática</span>
+                        )}
+                      </td>
+                    ) : null}
                   </tr>
                 ))}
+                {lancamentos.length === 0 ? (
+                  <tr>
+                    <td colSpan={podeEditar ? 6 : 5} className="px-5 py-8 text-center text-sm text-muted-foreground">
+                      Nenhum lançamento no período.
+                    </td>
+                  </tr>
+                ) : null}
               </tbody>
             </table>
           </div>

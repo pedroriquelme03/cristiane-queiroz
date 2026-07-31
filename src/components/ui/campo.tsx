@@ -2,6 +2,8 @@ import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
+export { CampoSelect } from "@/components/ui/campo-select";
+
 const CLASSE_CONTROLE =
   "mt-1 w-full rounded-lg border bg-surface px-3 py-2 text-sm focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none";
 
@@ -64,42 +66,6 @@ export function CampoTexto({
         className={cn(CLASSE_CONTROLE, erro ? "border-negative" : "border-border")}
         {...resto}
       />
-    </Envolucro>
-  );
-}
-
-export function CampoSelect({
-  id,
-  rotulo,
-  opcoes,
-  erro,
-  dica,
-  className,
-  ...resto
-}: {
-  id: string;
-  rotulo: string;
-  opcoes: { valor: string; rotulo: string }[];
-  erro?: string;
-  dica?: string;
-  className?: string;
-} & Omit<React.SelectHTMLAttributes<HTMLSelectElement>, "id" | "className">) {
-  return (
-    <Envolucro id={id} rotulo={rotulo} erro={erro} dica={dica} className={className}>
-      <select
-        id={id}
-        name={id}
-        aria-invalid={erro ? true : undefined}
-        aria-describedby={erro ? `${id}-erro` : undefined}
-        className={cn(CLASSE_CONTROLE, erro ? "border-negative" : "border-border")}
-        {...resto}
-      >
-        {opcoes.map((o) => (
-          <option key={o.valor} value={o.valor}>
-            {o.rotulo}
-          </option>
-        ))}
-      </select>
     </Envolucro>
   );
 }

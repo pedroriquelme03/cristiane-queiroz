@@ -17,9 +17,11 @@ export async function criarEmpresa(
   const segmento = formData.get("segmento") as string;
   const email = formData.get("email") as string;
   const senha = formData.get("senha") as string;
+  const planoId = String(formData.get("planoId") ?? "");
+  const ciclo = String(formData.get("ciclo") ?? "");
 
   // Validação
-  if (!razao_social || !nome_fantasia || !cnpj || !segmento || !email || !senha) {
+  if (!razao_social || !nome_fantasia || !cnpj || !segmento || !email || !senha || !planoId || !ciclo) {
     return { error: "Todos os campos são obrigatórios." };
   }
   if (!/^\d{14}$/.test(cnpj)) {
@@ -27,6 +29,22 @@ export async function criarEmpresa(
   }
   if (senha.length < 6) {
     return { error: "A senha deve ter pelo menos 6 caracteres." };
+  }
+  if (ciclo !== "mensal" && ciclo !== "anual") {
+    return { error: "Selecione um ciclo de cobrança válido." };
+  }
+
+  const { data: plano, error: planoError } = await supabaseAdmin
+    .from("planos")
+    .select("id, ativo, trial_dias, preco_anual")
+    .eq("id", planoId)
+    .maybeSingle();
+
+  if (planoError || !plano || !plano.ativo) {
+    return { error: "O plano selecionado não está disponível." };
+  }
+  if (ciclo === "anual" && plano.preco_anual === null) {
+    return { error: "O plano selecionado não oferece cobrança anual." };
   }
 
   // 1. Criar empresa
@@ -81,6 +99,28 @@ export async function criarEmpresa(
     await supabaseAdmin.auth.admin.deleteUser(authUser.user.id);
     await supabaseAdmin.from("empresas").delete().eq("id", empresa.id);
     return { error: `Erro ao vincular o usuário à empresa: ${vinculoError.message}` };
+  }
+
+  // 5. Criar a assinatura no mesmo fluxo para que nenhum novo cliente fique
+  // sem plano e, consequentemente, invisível na gestão de assinaturas.
+  const hoje = new Date();
+  const trialDias = plano.trial_dias ?? 0;
+  const trialFim = trialDias > 0 ? new Date(hoje) : null;
+  trialFim?.setDate(trialFim.getDate() + trialDias);
+  const { error: assinaturaError } = await supabaseAdmin.from("assinaturas").insert({
+    empresa_id: empresa.id,
+    plano_id: plano.id,
+    ciclo,
+    status: trialDias > 0 ? "trial" : "ativa",
+    inicio: hoje.toISOString().slice(0, 10),
+    trial_fim: trialFim?.toISOString().slice(0, 10) ?? null,
+    dia_vencimento: Math.min(28, hoje.getDate()),
+  });
+
+  if (assinaturaError) {
+    await supabaseAdmin.auth.admin.deleteUser(authUser.user.id);
+    await supabaseAdmin.from("empresas").delete().eq("id", empresa.id);
+    return { error: `Erro ao vincular o plano: ${assinaturaError.message}` };
   }
 
   redirect("/admin/empresas");

@@ -72,7 +72,9 @@ export interface Lancamento {
   valor: number;
   descricao: string;
   contraparte: string | null;
+  documento: string | null;
   planoContaId: string | null;
+  origem: "manual" | "importacao" | "integracao";
 }
 
 export type StatusTitulo = "aberto" | "parcial" | "pago" | "cancelado";
@@ -86,8 +88,10 @@ export interface Titulo {
   vencimento: string;
   valor: number;
   valorPago: number;
+  dataPagamento: string | null;
   status: StatusTitulo;
   planoContaId: string | null;
+  origem: "manual" | "importacao" | "integracao";
 }
 
 export interface Orcamento {
@@ -103,6 +107,8 @@ export interface Indicador {
   descricao: string;
   unidade: "percentual" | "moeda" | "numero" | "dias";
   direcaoMeta: "maior_melhor" | "menor_melhor";
+  segmento: Segmento;
+  personalizado: boolean;
   valores: { competencia: string; valor: number; meta: number | null }[];
 }
 
@@ -119,6 +125,15 @@ export interface PlanoAcao {
   status: StatusAcao;
   percentual: number;
   impactoEstimado: number | null;
+}
+
+export interface HistoricoPlanoAcao {
+  id: string;
+  planoAcaoId: string | null;
+  tipo: "criada" | "alterada" | "progresso" | "comentario" | "excluida";
+  descricao: string;
+  autorNome: string;
+  criadoEm: string;
 }
 
 export interface Diagnostico {
@@ -151,6 +166,7 @@ export interface Documento {
 
 export interface Reuniao {
   id: string;
+  empresaId?: string;
   tipo: "reuniao" | "treinamento";
   titulo: string;
   data: string;
