@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
-const ROTAS_PUBLICAS = ["/login", "/auth", "/recuperar-senha"];
+const ROTAS_PUBLICAS = ["/login", "/auth", "/recuperar-senha", "/apresentacao"];
 const ROTAS_LIBERADAS_BLOQUEIO = ["/assinatura"];
 
 type NivelPlano = "essencial" | "profissional" | "enterprise";
@@ -90,6 +90,14 @@ export async function updateSession(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
   const ehPublica = ROTAS_PUBLICAS.some((rota) => pathname.startsWith(rota));
+
+  // Visitante deslogado na raiz vê a landing pública, não a tela de login.
+  if (!user && pathname === "/") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/apresentacao";
+    url.search = "";
+    return redirecionarPreservandoCookies(url, response);
+  }
 
   if (!user && !ehPublica) {
     const url = request.nextUrl.clone();
