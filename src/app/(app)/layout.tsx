@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 
 import { GuardaAssinatura } from "@/components/assinatura/guarda-assinatura";
 import { BarraLateral } from "@/components/layout/barra-lateral";
@@ -28,7 +28,11 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         <BarraTopo />
         <main className="flex-1 px-6 py-6">
           <div className="mx-auto max-w-7xl space-y-6">
-            {sessao.role === "admin" ? <AvisoSolicitacaoReuniaoAdmin /> : null}
+            {sessao.role === "admin" ? (
+              <Suspense fallback={null}>
+                <AvisoSolicitacaoReuniaoAdmin />
+              </Suspense>
+            ) : null}
             {/* Super admin nunca é barrado: precisa gerenciar as assinaturas */}
             {sessao.role === "admin" ? (
               children

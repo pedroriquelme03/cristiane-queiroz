@@ -83,30 +83,30 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  // Nao remova: getUser() revalida o token e renova os cookies da sessao.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // getClaims valida o token e renova a sessao quando necessario. Com chaves
+  // assimetricas, a assinatura e conferida localmente e elimina uma ida ao Auth.
+  const { data: claimsData } = await supabase.auth.getClaims();
+  const usuarioId = claimsData?.claims.sub;
 
   const { pathname } = request.nextUrl;
   const ehPublica = ROTAS_PUBLICAS.some((rota) => pathname.startsWith(rota));
 
-  if (!user && !ehPublica) {
+  if (!usuarioId && !ehPublica) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("redirect", pathname);
     return redirecionarPreservandoCookies(url, response);
   }
 
-  if (user && pathname === "/login") {
+  if (usuarioId && pathname === "/login") {
     const url = request.nextUrl.clone();
     url.pathname = "/";
     url.search = "";
     return redirecionarPreservandoCookies(url, response);
   }
 
-  if (user && !ehPublica) {
-    const acessoUsuario = await getAcessoUsuario(supabase, user.id);
+  if (usuarioId && !ehPublica) {
+    const acessoUsuario = await getAcessoUsuario(supabase, usuarioId);
     const acessoPlano = podeAcessarRotaPeloPlano(acessoUsuario, pathname);
 
     if (!acessoPlano.permitido) {

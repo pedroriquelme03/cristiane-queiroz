@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 
+import { MarcaCristianeQueiroz } from "@/components/layout/marca-cristiane-queiroz";
 import { ORDEM_GRUPOS, ROTULOS_GRUPO, itensVisiveis } from "@/lib/navegacao";
 import type { Papel, Plano } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -31,17 +32,10 @@ export function BarraLateral({
     >
       <Link
         href="/"
-        className="flex items-center gap-3 border-b border-border px-5 py-4"
+        aria-label="Ir para o início"
+        className="flex min-h-[4.25rem] items-center border-b border-border px-4 py-1.5"
       >
-        <span className="grid size-9 place-items-center rounded-lg bg-brand text-sm font-semibold text-brand-foreground">
-          CQ
-        </span>
-        <span className="leading-tight">
-          <span className="block text-sm font-semibold">Cristiane Queiroz</span>
-          <span className="block text-xs text-muted-foreground">
-            Consultoria Financeira
-          </span>
-        </span>
+        <MarcaCristianeQueiroz className="w-[9rem]" priority />
       </Link>
 
       <div className="flex-1 overflow-y-auto px-3 py-4">

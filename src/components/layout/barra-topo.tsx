@@ -6,23 +6,12 @@ import { SeletorTema } from "@/components/layout/seletor-tema";
 import { getCompetenciaAtual } from "@/lib/dados";
 import { competenciaExtenso } from "@/lib/format";
 import { getSessao } from "@/lib/sessao";
-import { createClient } from "@/lib/supabase/server";
 
 export async function BarraTopo() {
   const [sessao, competencia] = await Promise.all([getSessao(), getCompetenciaAtual()]);
-  const empresa = sessao.role === "admin"
-    ? null
-    : (await (await createClient())
-      .from("empresas")
-      .select("*")
-      .eq("id", sessao.empresaId)
-      .maybeSingle()).data;
-
-  const nomeEmpresa = empresa?.razao_social
-    ?? empresa?.nome_fantasia
-    ?? "Vínculo de empresa pendente";
-  const unidades = Array.isArray(empresa?.unidades) ? empresa.unidades.length : 0;
-  const colaboradores = empresa?.qtd_funcionarios ?? 0;
+  const nomeEmpresa = sessao.empresa?.nome ?? "Vínculo de empresa pendente";
+  const unidades = sessao.empresa?.unidades ?? 0;
+  const colaboradores = sessao.empresa?.colaboradores ?? 0;
   const papel = sessao.role === "admin" ? "Administrador" : "Cliente";
 
   return (

@@ -57,7 +57,20 @@ export const getPlano = cache(async (id: string): Promise<Plano | null> => {
 export const getAssinaturaEmpresa = cache(async (
   empresaId: string,
 ): Promise<{ assinatura: Assinatura; plano: Plano; faturas: Fatura[] } | null> => {
-  const tenant = (await getTenants()).find((t) => t.empresa.id === empresaId);
+  const supabase = await criarSupabaseObrigatorio();
+  const { data, error } = await supabase
+    .from("assinaturas")
+    .select(`
+      *,
+      empresa:empresas(*),
+      plano:planos(*),
+      faturas(*)
+    `)
+    .eq("empresa_id", empresaId)
+    .maybeSingle();
+
+  if (error) throw new Error("Nao foi possivel carregar a assinatura da empresa.");
+  const tenant = data ? mapTenant(data as unknown as TenantSupabase) : null;
   if (!tenant) return null;
   return {
     assinatura: tenant.assinatura,
@@ -105,22 +118,8 @@ export const getTenants = cache(async (): Promise<TenantAssinatura[]> => {
   if (error) throw new Error("Nao foi possivel carregar assinaturas.");
   return (data ?? [])
     .flatMap((row) => {
-      const empresa = normalizarJoin(row.empresa) as EmpresaSupabase | null;
-      const plano = normalizarJoin(row.plano) as PlanoSupabase | null;
-      if (!empresa || !plano) return [];
-
-      const assinatura = mapAssinatura(row);
-      const faturas = ((row.faturas ?? []) as FaturaSupabase[])
-        .map(mapFatura)
-        .sort((a, b) => b.vencimento.localeCompare(a.vencimento));
-
-      return {
-        empresa: mapEmpresa(empresa),
-        plano: mapPlano(plano),
-        assinatura,
-        estado: calcularEstado(assinatura, faturas),
-        faturas,
-      };
+      const tenant = mapTenant(row as unknown as TenantSupabase);
+      return tenant ? [tenant] : [];
     });
 });
 
@@ -226,6 +225,12 @@ type FaturaSupabase = {
   observacao: string | null;
 };
 
+type TenantSupabase = AssinaturaSupabase & {
+  empresa: EmpresaSupabase | EmpresaSupabase[] | null;
+  plano: PlanoSupabase | PlanoSupabase[] | null;
+  faturas: FaturaSupabase[] | null;
+};
+
 function numero(valor: number | string | null) {
   return typeof valor === "string" ? Number(valor) : valor ?? 0;
 }
@@ -289,6 +294,25 @@ function mapAssinatura(row: AssinaturaSupabase): Assinatura {
     trialFim: row.trial_fim ? dataIso(row.trial_fim) : null,
     bloqueioManual: row.bloqueio_manual,
     canceladaEm: row.cancelada_em ? dataIso(row.cancelada_em) : null,
+  };
+}
+
+function mapTenant(row: TenantSupabase): TenantAssinatura | null {
+  const empresa = normalizarJoin(row.empresa);
+  const plano = normalizarJoin(row.plano);
+  if (!empresa || !plano) return null;
+
+  const assinatura = mapAssinatura(row);
+  const faturas = (row.faturas ?? [])
+    .map(mapFatura)
+    .sort((a, b) => b.vencimento.localeCompare(a.vencimento));
+
+  return {
+    empresa: mapEmpresa(empresa),
+    plano: mapPlano(plano),
+    assinatura,
+    estado: calcularEstado(assinatura, faturas),
+    faturas,
   };
 }
 

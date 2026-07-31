@@ -9,7 +9,7 @@ export function BotaoExcluirUsuario({
     <form
       action={action}
       onSubmit={(event) => {
-        if (!window.confirm("Excluir este usuário e seu acesso? Esta ação não pode ser desfeita.")) {
+        if (!window.confirm("Excluir esta empresa e todos os acessos vinculados? Esta ação não pode ser desfeita.")) {
           event.preventDefault();
         }
       }}
@@ -18,7 +18,7 @@ export function BotaoExcluirUsuario({
         type="submit"
         className="rounded-lg border border-destructive/30 px-3 py-2 text-xs font-medium text-destructive hover:bg-destructive/10"
       >
-        Excluir usuário
+        Excluir empresa
       </button>
     </form>
   );
