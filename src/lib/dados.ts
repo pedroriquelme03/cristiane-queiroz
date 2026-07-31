@@ -189,7 +189,7 @@ export async function getLancamentos(
   const supabase = await criarSupabaseObrigatorio();
   const { data, error } = await supabase
     .from("lancamentos")
-    .select("id, data, tipo, valor, descricao, contraparte, plano_conta_id")
+    .select("id, data, tipo, valor, descricao, contraparte, documento, plano_conta_id, origem")
     .eq("empresa_id", empresaId)
     .gte("data", inicio)
     .lte("data", fim)
@@ -206,7 +206,7 @@ export async function getTitulos(tipo: Titulo["tipo"], empresaIdParam?: string):
   const supabase = await criarSupabaseObrigatorio();
   const { data, error } = await supabase
     .from("titulos")
-    .select("id, tipo, contraparte, documento, emissao, vencimento, valor, valor_pago, status, plano_conta_id")
+    .select("id, tipo, contraparte, documento, emissao, vencimento, valor, valor_pago, data_pagamento, status, plano_conta_id, origem")
     .eq("empresa_id", empresaId)
     .eq("tipo", tipo)
     .order("vencimento");
@@ -421,6 +421,7 @@ export async function getAlertas(empresaIdParam?: string): Promise<Alerta[]> {
       .select("id, severidade, titulo, descricao")
       .eq("empresa_id", empresaId)
       .eq("resolvido", false)
+      .neq("tipo", "solicitacao_reuniao")
       .order("created_at", { ascending: false }),
     supabase
       .from("reunioes")
@@ -617,7 +618,9 @@ function mapLancamento(row: {
   valor: number | string;
   descricao: string;
   contraparte: string | null;
+  documento: string | null;
   plano_conta_id: string | null;
+  origem: Lancamento["origem"];
 }): Lancamento {
   return {
     id: row.id,
@@ -626,7 +629,9 @@ function mapLancamento(row: {
     valor: numero(row.valor),
     descricao: row.descricao,
     contraparte: row.contraparte,
+    documento: row.documento,
     planoContaId: row.plano_conta_id,
+    origem: row.origem,
   };
 }
 
@@ -639,8 +644,10 @@ function mapTitulo(row: {
   vencimento: string;
   valor: number | string;
   valor_pago: number | string;
+  data_pagamento: string | null;
   status: Titulo["status"];
   plano_conta_id: string | null;
+  origem: Titulo["origem"];
 }): Titulo {
   return {
     id: row.id,
@@ -651,8 +658,10 @@ function mapTitulo(row: {
     vencimento: dataIso(row.vencimento),
     valor: numero(row.valor),
     valorPago: numero(row.valor_pago),
+    dataPagamento: row.data_pagamento ? dataIso(row.data_pagamento) : null,
     status: row.status,
     planoContaId: row.plano_conta_id,
+    origem: row.origem,
   };
 }
 

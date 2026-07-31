@@ -30,6 +30,7 @@ export function DialogoReuniao({
   const [aberto, setAberto] = useState(false);
   const [estado, acao] = useActionState(salvarReuniao, ESTADO_INICIAL);
   const agora = new Date();
+  if (!admin) agora.setDate(agora.getDate() + 1);
   agora.setMinutes(agora.getMinutes() - agora.getTimezoneOffset());
   const dataPadrao = agora.toISOString().slice(0, 16);
 
@@ -41,17 +42,17 @@ export function DialogoReuniao({
         className="flex items-center gap-1.5 rounded-lg bg-brand px-3 py-2 text-sm font-medium text-brand-foreground"
       >
         <Plus className="size-4" aria-hidden />
-        Nova reunião
+        {admin ? "Nova reunião" : "Solicitar nova reunião"}
       </button>
 
       <Modal
         aberto={aberto}
-        titulo="Nova reunião"
-        descricao="Registro de reunião, treinamento, ata e gravação"
+        titulo={admin ? "Nova reunião" : "Solicitar nova reunião"}
+        descricao={admin ? "Registro de reunião, treinamento, ata e gravação" : "Informe uma data desejada para a consultoria avaliar"}
         onFechar={() => setAberto(false)}
       >
         <form action={acao} className="space-y-4">
-          <Aviso estado={estado} />
+          <Aviso estado={estado} admin={admin} />
 
           {admin ? (
             <CampoSelect
@@ -71,20 +72,22 @@ export function DialogoReuniao({
             <input type="hidden" name="empresaId" value={empresaIdAtual ?? ""} />
           )}
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <CampoSelect
-              id="tipo"
-              rotulo="Tipo"
-              defaultValue={estado.valores?.tipo ?? "reuniao"}
-              opcoes={[
-                { valor: "reuniao", rotulo: "Reunião" },
-                { valor: "treinamento", rotulo: "Treinamento" },
-              ]}
-              erro={estado.campos?.tipo}
-            />
+          <div className={admin ? "grid gap-4 sm:grid-cols-2" : undefined}>
+            {admin ? (
+              <CampoSelect
+                id="tipo"
+                rotulo="Tipo"
+                defaultValue={estado.valores?.tipo ?? "reuniao"}
+                opcoes={[
+                  { valor: "reuniao", rotulo: "Reunião" },
+                  { valor: "treinamento", rotulo: "Treinamento" },
+                ]}
+                erro={estado.campos?.tipo}
+              />
+            ) : null}
             <CampoTexto
               id="data"
-              rotulo="Data e hora"
+              rotulo={admin ? "Data e hora" : "Data e hora desejadas"}
               tipo="datetime-local"
               defaultValue={estado.valores?.data ?? dataPadrao}
               erro={estado.campos?.data}
@@ -94,40 +97,44 @@ export function DialogoReuniao({
 
           <CampoTexto
             id="titulo"
-            rotulo="Título"
-            placeholder="Ex.: Reunião mensal de resultados"
+            rotulo={admin ? "Título" : "Assunto"}
+            placeholder={admin ? "Ex.: Reunião mensal de resultados" : "Ex.: Dúvidas sobre o fluxo de caixa"}
             defaultValue={estado.valores?.titulo}
             erro={estado.campos?.titulo}
             required
           />
 
-          <CampoTexto
-            id="participantes"
-            rotulo="Participantes"
-            placeholder="Consultoria CQ, sócios e financeiro"
-            defaultValue={estado.valores?.participantes}
-            erro={estado.campos?.participantes}
-            required
-          />
+          {admin ? (
+            <CampoTexto
+              id="participantes"
+              rotulo="Participantes"
+              placeholder="Consultoria CQ, sócios e financeiro"
+              defaultValue={estado.valores?.participantes}
+              erro={estado.campos?.participantes}
+              required
+            />
+          ) : null}
 
           <CampoArea
             id="ata"
-            rotulo="Pauta / ata"
-            placeholder="Assuntos previstos, decisões tomadas ou próximos passos."
+            rotulo={admin ? "Pauta / ata" : "Motivo ou observações"}
+            placeholder={admin ? "Assuntos previstos, decisões tomadas ou próximos passos." : "Descreva brevemente o assunto que deseja tratar."}
             defaultValue={estado.valores?.ata}
             erro={estado.campos?.ata}
           />
 
-          <CampoTexto
-            id="gravacaoUrl"
-            rotulo="Link da gravação"
-            tipo="url"
-            placeholder="https://..."
-            defaultValue={estado.valores?.gravacaoUrl}
-            erro={estado.campos?.gravacaoUrl}
-          />
+          {admin ? (
+            <CampoTexto
+              id="gravacaoUrl"
+              rotulo="Link da gravação"
+              tipo="url"
+              placeholder="https://..."
+              defaultValue={estado.valores?.gravacaoUrl}
+              erro={estado.campos?.gravacaoUrl}
+            />
+          ) : null}
 
-          <Rodape onCancelar={() => setAberto(false)} />
+          <Rodape onCancelar={() => setAberto(false)} texto={admin ? "Salvar" : "Enviar solicitação"} />
         </form>
       </Modal>
     </>
@@ -170,7 +177,7 @@ function CampoArea({
   );
 }
 
-function Aviso({ estado }: { estado: EstadoReuniao }) {
+function Aviso({ estado, admin }: { estado: EstadoReuniao; admin: boolean }) {
   if (estado.ok) {
     return (
       <div
@@ -178,7 +185,9 @@ function Aviso({ estado }: { estado: EstadoReuniao }) {
         className="flex items-start gap-2.5 rounded-lg border border-positive/20 bg-positive-soft px-3 py-2.5"
       >
         <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-positive" aria-hidden />
-        <p className="text-sm text-positive">Reunião registrada.</p>
+        <p className="text-sm text-positive">
+          {admin ? "Reunião registrada." : "Solicitação enviada para a consultoria."}
+        </p>
       </div>
     );
   }
@@ -198,7 +207,7 @@ function Aviso({ estado }: { estado: EstadoReuniao }) {
   return null;
 }
 
-function Rodape({ onCancelar }: { onCancelar: () => void }) {
+function Rodape({ onCancelar, texto }: { onCancelar: () => void; texto: string }) {
   const { pending } = useFormStatus();
 
   return (
@@ -215,7 +224,7 @@ function Rodape({ onCancelar }: { onCancelar: () => void }) {
         disabled={pending}
         className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-brand-foreground disabled:opacity-40"
       >
-        {pending ? "Salvando..." : "Salvar"}
+        {pending ? "Salvando..." : texto}
       </button>
     </div>
   );

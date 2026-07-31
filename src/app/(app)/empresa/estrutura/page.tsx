@@ -3,15 +3,16 @@ import { Building2, MapPin, Plus, Trash2, Users, UsersRound } from "lucide-react
 
 import {
   adicionarArea,
-  adicionarCargo,
   adicionarUnidade,
   atualizarColaboradores,
   removerArea,
   removerCargo,
   removerUnidade,
 } from "@/app/(app)/empresa/actions";
+import { FormCargo } from "@/components/empresa/form-cargo";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardBody } from "@/components/ui/card";
+import { CampoSelect } from "@/components/ui/campo";
 import { getSessao } from "@/lib/sessao";
 import { createClient } from "@/lib/supabase/server";
 
@@ -96,15 +97,22 @@ export default async function EstruturaPage({
   const listaCargos = cargos ?? [];
   const totalCargos = listaCargos.length;
   const totalPosicoes = listaCargos.reduce((soma, cargo) => soma + cargo.quantidade, 0);
+  const totalColaboradores = Math.max(empresa.qtd_funcionarios ?? 0, totalPosicoes);
 
   return (
-    <div className="grid gap-4 xl:grid-cols-3">
+    <div className="grid min-w-0 gap-4 xl:grid-cols-3">
       <PainelEstrutura
         titulo="Colaboradores"
-        valor={String(empresa.qtd_funcionarios ?? 0)}
-        descricao="Total informado pela empresa"
+        valor={String(totalColaboradores)}
+        descricao={`${totalPosicoes} alocados em cargos`}
         icone={<Users className="size-4" aria-hidden />}
-        acao={podeEditar ? <FormColaboradores empresaId={empresa.id} valorAtual={empresa.qtd_funcionarios ?? 0} /> : null}
+        acao={podeEditar ? (
+          <FormColaboradores
+            empresaId={empresa.id}
+            valorAtual={totalColaboradores}
+            minimo={totalPosicoes}
+          />
+        ) : null}
       >
         <p className="text-sm text-muted-foreground">
           Use esse número como visão geral da equipe. Os cargos abaixo detalham onde essas pessoas estão alocadas.
@@ -232,7 +240,7 @@ function PainelEstrutura({
   children: ReactNode;
 }) {
   return (
-    <Card className="min-h-[360px]">
+    <Card className="min-h-[360px] min-w-0 overflow-hidden">
       <CardBody className="space-y-4">
         <header className="flex items-start justify-between gap-3">
           <div>
@@ -242,8 +250,8 @@ function PainelEstrutura({
           </div>
           <span className="text-muted-foreground">{icone}</span>
         </header>
-        {acao ? <div>{acao}</div> : null}
-        <div className="max-h-[420px] overflow-y-auto pr-1">{children}</div>
+        {acao ? <div className="min-w-0">{acao}</div> : null}
+        <div className="min-w-0 max-h-[420px] overflow-y-auto pr-1">{children}</div>
       </CardBody>
     </Card>
   );
@@ -252,14 +260,16 @@ function PainelEstrutura({
 function FormColaboradores({
   empresaId,
   valorAtual,
+  minimo,
 }: {
   empresaId: string;
   valorAtual: number;
+  minimo: number;
 }) {
   return (
     <details>
-      <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-surface-muted hover:text-foreground">
-        <Plus className="size-3.5" aria-hidden />
+      <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-lg bg-brand px-3 py-2 text-xs font-medium text-brand-foreground hover:opacity-90">
+        <Plus className="size-4" aria-hidden />
         Colaboradores
       </summary>
       <form action={atualizarColaboradores.bind(null, empresaId)} className="mt-3 flex gap-2">
@@ -267,7 +277,7 @@ function FormColaboradores({
           name="qtd_funcionarios"
           required
           type="number"
-          min={0}
+          min={minimo}
           defaultValue={valorAtual}
           className="min-w-0 flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm"
         />
@@ -286,16 +296,29 @@ function FormUnidade({ empresaId }: { empresaId: string }) {
         <Plus className="size-4" aria-hidden />
         Unidade
       </summary>
-      <form action={adicionarUnidade.bind(null, empresaId)} className="mt-3 grid gap-2">
-        <input name="nome" required placeholder="Nome da unidade" className="rounded-lg border border-border bg-surface px-3 py-2 text-sm" />
-        <div className="grid gap-2 sm:grid-cols-[1fr_1fr_64px]">
-          <select name="tipo" defaultValue="filial" className="rounded-lg border border-border bg-surface px-3 py-2 text-sm">
-            {TIPOS_UNIDADE.map(([valor, rotulo]) => <option key={valor} value={valor}>{rotulo}</option>)}
-          </select>
-          <input name="cidade" placeholder="Cidade" className="rounded-lg border border-border bg-surface px-3 py-2 text-sm" />
-          <input name="uf" maxLength={2} placeholder="UF" className="rounded-lg border border-border bg-surface px-3 py-2 text-sm uppercase" />
+      <form action={adicionarUnidade.bind(null, empresaId)} className="mt-3 grid min-w-0 gap-3">
+        <label className="grid min-w-0 gap-1 text-xs font-medium text-muted-foreground">
+          Nome da unidade
+          <input name="nome" required placeholder="Ex.: Filial Centro" className="min-w-0 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground" />
+        </label>
+        <CampoSelect
+          id={`tipo-unidade-${empresaId}`}
+          name="tipo"
+          rotulo="Tipo de unidade"
+          defaultValue="filial"
+          opcoes={TIPOS_UNIDADE.map(([valor, rotulo]) => ({ valor, rotulo }))}
+        />
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_64px] gap-2">
+          <label className="grid min-w-0 gap-1 text-xs font-medium text-muted-foreground">
+            Cidade
+            <input name="cidade" placeholder="Cidade" className="min-w-0 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground" />
+          </label>
+          <label className="grid min-w-0 gap-1 text-xs font-medium text-muted-foreground">
+            UF
+            <input name="uf" maxLength={2} placeholder="UF" className="min-w-0 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground uppercase" />
+          </label>
         </div>
-        <button className="rounded-lg bg-brand px-3 py-2 text-xs font-medium text-brand-foreground hover:opacity-90">
+        <button className="w-full rounded-lg bg-brand px-3 py-2 text-xs font-medium text-brand-foreground hover:opacity-90">
           Adicionar unidade
         </button>
       </form>
@@ -310,27 +333,12 @@ function FormArea({ empresaId }: { empresaId: string }) {
         <Plus className="size-4" aria-hidden />
         Área
       </summary>
-      <form action={adicionarArea.bind(null, empresaId)} className="mt-3 flex gap-2">
-        <input name="nome" required placeholder="Nova área, por exemplo: Financeiro" className="min-w-0 flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm" />
-        <button className="rounded-lg bg-brand px-3 py-2 text-xs font-medium text-brand-foreground hover:opacity-90">
-          Adicionar
-        </button>
-      </form>
-    </details>
-  );
-}
-
-function FormCargo({ empresaId, areaId }: { empresaId: string; areaId: string }) {
-  return (
-    <details className="mt-3 border-t border-border pt-3">
-      <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-xs font-medium text-brand hover:underline">
-        <Plus className="size-3.5" aria-hidden />
-        Adicionar cargo
-      </summary>
-      <form action={adicionarCargo.bind(null, empresaId, areaId)} className="mt-2 grid gap-2 sm:grid-cols-[1fr_72px_auto]">
-        <input name="nome" required placeholder="Nome do cargo" className="min-w-0 rounded-lg border border-border bg-surface px-3 py-2 text-sm" />
-        <input name="quantidade" required type="number" min="0" defaultValue="1" className="rounded-lg border border-border bg-surface px-3 py-2 text-sm" />
-        <button className="rounded-lg border border-border px-3 py-2 text-xs font-medium hover:bg-surface-muted">
+      <form action={adicionarArea.bind(null, empresaId)} className="mt-3 grid min-w-0 gap-2">
+        <label className="grid min-w-0 gap-1 text-xs font-medium text-muted-foreground">
+          Nome da área
+          <input name="nome" required placeholder="Ex.: Financeiro" className="min-w-0 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground" />
+        </label>
+        <button className="w-full rounded-lg bg-brand px-3 py-2 text-xs font-medium text-brand-foreground hover:opacity-90">
           Adicionar
         </button>
       </form>

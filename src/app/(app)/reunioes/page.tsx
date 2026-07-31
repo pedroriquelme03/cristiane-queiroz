@@ -1,5 +1,6 @@
-import { CalendarClock, GraduationCap, Users, Video } from "lucide-react";
+import { BellRing, CalendarClock, Check, GraduationCap, Users, Video } from "lucide-react";
 
+import { aceitarSolicitacaoReuniao } from "@/app/(app)/reunioes/acoes";
 import { SeletorEmpresaAdmin } from "@/components/admin/seletor-empresa-admin";
 import { DialogoReuniao } from "@/components/reunioes/dialogo-reuniao";
 import { Badge } from "@/components/ui/badge";
@@ -43,9 +44,10 @@ export default async function ReunioesPage({
     sessao.role === "admin" && Boolean(empresaIdSelecionada) && !empresaSelecionadaEnterprise;
   const empresaId =
     sessao.role === "admin" ? empresaSelecionadaEnterprise : sessao.empresaId;
-  const [todosRegistros, agora] = await Promise.all([
+  const [todosRegistros, agora, solicitacoes] = await Promise.all([
     getReunioes(empresaId),
     getAgora(),
+    empresaSelecionadaInvalida ? [] : listarSolicitacoesReuniao(empresaId),
   ]);
   const registros = empresaSelecionadaInvalida
     ? []
@@ -83,6 +85,33 @@ export default async function ReunioesPage({
         }
       />
 
+      {sessao.role === "admin" && solicitacoes.length ? (
+        <section className="rounded-lg border border-warning/30 bg-warning-soft px-4 py-3">
+          <div className="flex items-start gap-3">
+            <BellRing className="mt-0.5 size-5 shrink-0 text-warning" aria-hidden />
+            <div className="min-w-0 flex-1">
+              <h2 className="text-sm font-semibold">Solicitações de reunião</h2>
+              <div className="mt-2 divide-y divide-warning/20">
+                {solicitacoes.map((solicitacao) => (
+                  <article key={solicitacao.id} className="flex flex-wrap items-center justify-between gap-3 py-2 first:pt-0 last:pb-0">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium">{solicitacao.empresaNome}</p>
+                      <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{solicitacao.descricao}</p>
+                    </div>
+                    <form action={aceitarSolicitacaoReuniao.bind(null, solicitacao.id)}>
+                      <button className="inline-flex items-center gap-1.5 rounded-lg border border-warning/30 px-2.5 py-1.5 text-xs font-medium hover:bg-warning/10">
+                        <Check className="size-3.5" aria-hidden />
+                        Aceitar e agendar
+                      </button>
+                    </form>
+                  </article>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
       {proximaReuniao ? (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-brand/30 bg-brand-soft px-4 py-3">
           <div className="flex items-start gap-3">
@@ -98,11 +127,17 @@ export default async function ReunioesPage({
         </div>
       ) : null}
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Kpi
           rotulo="Reuniões"
           valor={String(reunioes.length)}
           icone={<Users className="size-4" aria-hidden />}
+        />
+        <Kpi
+          rotulo="Solicitações"
+          valor={String(solicitacoes.length)}
+          tom={solicitacoes.length ? "atencao" : "neutro"}
+          icone={<BellRing className="size-4" aria-hidden />}
         />
         <Kpi
           rotulo="Treinamentos"
@@ -196,6 +231,32 @@ async function listarEmpresasEnterprise() {
       b.razao_social ?? b.nome_fantasia ?? "",
     ),
   );
+}
+
+async function listarSolicitacoesReuniao(empresaId?: string) {
+  const supabase = await createClient();
+  let query = supabase
+    .from("alertas")
+    .select("id, descricao, empresa:empresas(nome_fantasia, razao_social)")
+    .eq("tipo", "solicitacao_reuniao")
+    .eq("resolvido", false)
+    .order("created_at", { ascending: false });
+
+  if (empresaId) query = query.eq("empresa_id", empresaId);
+  const { data, error } = await query;
+
+  if (error) return [];
+  return (data ?? []).map((solicitacao) => {
+    const empresa = normalizarJoin<{
+      nome_fantasia: string | null;
+      razao_social: string | null;
+    }>(solicitacao.empresa ?? null);
+    return {
+      id: solicitacao.id,
+      descricao: solicitacao.descricao ?? "Solicitação sem detalhes.",
+      empresaNome: empresa?.nome_fantasia || empresa?.razao_social || "Empresa",
+    };
+  });
 }
 
 function normalizarJoin<T>(valor: T | T[] | null): T | null {

@@ -72,7 +72,9 @@ export interface Lancamento {
   valor: number;
   descricao: string;
   contraparte: string | null;
+  documento: string | null;
   planoContaId: string | null;
+  origem: "manual" | "importacao" | "integracao";
 }
 
 export type StatusTitulo = "aberto" | "parcial" | "pago" | "cancelado";
@@ -86,8 +88,10 @@ export interface Titulo {
   vencimento: string;
   valor: number;
   valorPago: number;
+  dataPagamento: string | null;
   status: StatusTitulo;
   planoContaId: string | null;
+  origem: "manual" | "importacao" | "integracao";
 }
 
 export interface Orcamento {

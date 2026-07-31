@@ -4,20 +4,23 @@ import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Kpi } from "@/components/ui/kpi";
 import { getPlanoContas, getTitulos, statusEfetivo } from "@/lib/dados";
 import { diasAte, moeda } from "@/lib/format";
+import { getSessao } from "@/lib/sessao";
 
 export default async function ContasAPagarPage({
   searchParams,
 }: {
   searchParams: Promise<{ empresa?: string | string[] }>;
 }) {
-  const { empresa } = await searchParams;
+  const [{ empresa }, sessao] = await Promise.all([searchParams, getSessao()]);
   const empresaId = typeof empresa === "string" ? empresa : undefined;
+  const empresaIdAtiva = sessao.role === "admin" ? empresaId : sessao.empresaId;
+  const podeEditar = Boolean(empresaIdAtiva) && (sessao.role === "admin" || sessao.role === "cliente");
   const [titulos, contas] = await Promise.all([
-    getTitulos("pagar", empresaId),
-    getPlanoContas(empresaId),
+    getTitulos("pagar", empresaIdAtiva),
+    getPlanoContas(empresaIdAtiva),
   ]);
 
-  const abertos = titulos.filter((t) => statusEfetivo(t) === "aberto");
+  const abertos = titulos.filter((t) => ["aberto", "parcial"].includes(statusEfetivo(t)));
   const vencidos = titulos.filter((t) => statusEfetivo(t) === "vencido");
   const pagos = titulos.filter((t) => t.status === "pago");
 
@@ -57,7 +60,7 @@ export default async function ContasAPagarPage({
             descricao="Prioridade de negociação — risco de juros e de corte de fornecimento"
           />
           <CardBody className="px-0 py-0">
-            <TabelaTitulos titulos={vencidos} rotuloContraparte="Fornecedor" />
+            <TabelaTitulos titulos={vencidos} rotuloContraparte="Fornecedor" contas={contas} empresaId={empresaIdAtiva} podeEditar={podeEditar} />
           </CardBody>
         </Card>
       ) : null}
@@ -66,17 +69,17 @@ export default async function ContasAPagarPage({
         <CardHeader
           titulo="Contas a pagar em aberto"
           descricao="Ordenadas por vencimento"
-          acao={<DialogoTitulo tipo="pagar" contas={contas} />}
+          acao={podeEditar ? <DialogoTitulo tipo="pagar" contas={contas} empresaId={empresaIdAtiva} /> : null}
         />
         <CardBody className="px-0 py-0">
-          <TabelaTitulos titulos={abertos} rotuloContraparte="Fornecedor" />
+          <TabelaTitulos titulos={abertos} rotuloContraparte="Fornecedor" contas={contas} empresaId={empresaIdAtiva} podeEditar={podeEditar} />
         </CardBody>
       </Card>
 
       <Card>
         <CardHeader titulo="Histórico de pagamentos" descricao="Títulos já quitados" />
         <CardBody className="px-0 py-0">
-          <TabelaTitulos titulos={pagos} rotuloContraparte="Fornecedor" />
+          <TabelaTitulos titulos={pagos} rotuloContraparte="Fornecedor" contas={contas} empresaId={empresaIdAtiva} podeEditar={podeEditar} />
         </CardBody>
       </Card>
     </>
