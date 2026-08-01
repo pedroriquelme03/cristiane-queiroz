@@ -35,7 +35,7 @@ export function BarraLateral({
         aria-label="Ir para o início"
         className="flex min-h-[4.25rem] items-center border-b border-border px-4 py-1.5"
       >
-        <MarcaCristianeQueiroz className="w-[9rem]" priority />
+        <MarcaCristianeQueiroz className="w-[7rem]" priority />
       </Link>
 
       <div className="flex-1 overflow-y-auto px-3 py-4">
