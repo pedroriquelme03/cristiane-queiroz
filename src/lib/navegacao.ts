@@ -7,6 +7,7 @@ import {
   Gauge,
   LayoutDashboard,
   ListChecks,
+  Presentation,
   ShieldCheck,
   Stethoscope,
   TrendingUp,
@@ -45,6 +46,7 @@ export const NAVEGACAO: ItemNavegacao[] = [
   { href: "/assinatura", rotulo: "Assinatura", icone: CreditCard, grupo: "conta", papeis: ["cliente"], recurso: "assinatura" },
 
   { href: "/admin/gestao", rotulo: "Assinaturas dos clientes", icone: ShieldCheck, grupo: "admin", papeis: ["admin"] },
+  { href: "/admin/apresentacao", rotulo: "Apresentações", icone: Presentation, grupo: "admin", papeis: ["admin"] },
   { href: "/admin/empresas", rotulo: "Usuários", icone: Users, grupo: "admin", papeis: ["admin"] },
   { href: "/admin/planos", rotulo: "Planos", icone: ListChecks, grupo: "admin", papeis: ["admin"] },
 ];
@@ -82,6 +84,7 @@ export const ABAS_FINANCEIRO: { href: string; rotulo: string; recurso: RecursoPl
   { href: "/financeiro/fluxo-de-caixa", rotulo: "Fluxo de caixa", recurso: "financeiro-basico" },
   { href: "/financeiro/contas-a-pagar", rotulo: "Contas a pagar", recurso: "financeiro-basico" },
   { href: "/financeiro/contas-a-receber", rotulo: "Contas a receber", recurso: "financeiro-basico" },
+  { href: "/financeiro/receitas", rotulo: "Análise de receitas", recurso: "financeiro-avancado" },
   { href: "/financeiro/dre", rotulo: "DRE gerencial", recurso: "financeiro-avancado" },
   { href: "/financeiro/orcamento", rotulo: "Orçamento", recurso: "financeiro-avancado" },
   { href: "/financeiro/importar", rotulo: "Importar planilha", recurso: "financeiro-avancado" },

@@ -13,18 +13,23 @@ import {
 
 import { GraficoSaldo } from "@/components/graficos/grafico-saldo";
 import { MiniSerie } from "@/components/graficos/mini-serie";
+import { ResumoReceitasDashboard } from "@/components/financeiro/resumo-receitas-dashboard";
 import { Badge } from "@/components/ui/badge";
 import { CabecalhoPagina } from "@/components/ui/cabecalho-pagina";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Kpi } from "@/components/ui/kpi";
 import { Progresso } from "@/components/ui/progresso";
+import { cn } from "@/lib/utils";
 import {
   getAlertas,
   getCompetenciaAtual,
+  getDre,
   getFluxoProjetado,
   getIndicadores,
   getKpis,
+  getLancamentos,
   getPlanosAcao,
+  intervaloDoMes,
 } from "@/lib/dados";
 import {
   competenciaExtenso,
@@ -56,12 +61,15 @@ const COR_ALERTA = {
 
 export default async function DashboardPage({ empresaId }: { empresaId?: string }) {
   const competencia = await getCompetenciaAtual();
-  const [kpis, projecao, indicadores, acoes, alertas] = await Promise.all([
+  const { inicio, fim } = intervaloDoMes(competencia);
+  const [kpis, projecao, indicadores, acoes, alertas, linhasDre, lancamentos] = await Promise.all([
     getKpis(competencia, empresaId),
     getFluxoProjetado(90, empresaId),
     getIndicadores(empresaId),
     getPlanosAcao(empresaId),
     getAlertas(empresaId),
+    getDre(inicio, fim, empresaId),
+    getLancamentos(inicio, fim, empresaId),
   ]);
 
   const acoesAtivas = acoes.filter((a) => a.status === "em_andamento");
@@ -73,6 +81,16 @@ export default async function DashboardPage({ empresaId }: { empresaId?: string 
       )
     : null;
   const sufixoEmpresa = empresaId ? `?empresa=${encodeURIComponent(empresaId)}` : "";
+  const receitaRealizada = linhasDre
+    .filter((linha) => linha.tipo === "receita")
+    .reduce((total, linha) => total + linha.realizado, 0);
+  const receitaOrcada = linhasDre
+    .filter((linha) => linha.tipo === "receita")
+    .reduce((total, linha) => total + linha.previsto, 0);
+  const resultadoOrcado = linhasDre.reduce((total, linha) => total + linha.previsto, 0);
+  const maiorDesvio = [...linhasDre]
+    .filter((linha) => linha.realizado !== 0 || linha.previsto !== 0)
+    .sort((a, b) => Math.abs(b.realizado - b.previsto) - Math.abs(a.realizado - a.previsto))[0];
   const prioridades = [
     kpis.contasPagarVencidas > 0
       ? {
@@ -195,6 +213,38 @@ export default async function DashboardPage({ empresaId }: { empresaId?: string 
             ))}
           </CardBody>
         ) : null}
+      </Card>
+
+      <ResumoReceitasDashboard
+        linhas={linhasDre}
+        lancamentos={lancamentos}
+        href={`/financeiro/receitas${sufixoEmpresa}`}
+      />
+
+      <Card>
+        <CardHeader
+          titulo="Desempenho versus plano"
+          descricao="Leitura rápida do realizado frente ao orçamento do mês."
+          acao={<Link href={`/financeiro/orcamento${sufixoEmpresa}`} className="text-xs font-medium text-brand hover:underline">Abrir orçamento</Link>}
+        />
+        <CardBody className="grid gap-5 lg:grid-cols-3">
+          <ComparativoExecutivo
+            rotulo="Receita"
+            realizado={receitaRealizada}
+            previsto={receitaOrcada}
+            favoravelMaior
+          />
+          <ComparativoExecutivo
+            rotulo="Resultado"
+            realizado={kpis.resultadoMes}
+            previsto={resultadoOrcado}
+            favoravelMaior
+          />
+          <div className="rounded-lg bg-surface-muted p-3">
+            <p className="text-xs font-medium text-muted-foreground">Principal desvio</p>
+            {maiorDesvio ? <><p className="mt-1 truncate text-sm font-medium">{maiorDesvio.conta}</p><p className={cn("mt-1 text-lg font-semibold tabular", maiorDesvio.realizado - maiorDesvio.previsto >= 0 ? "text-positive" : "text-negative")}>{maiorDesvio.realizado - maiorDesvio.previsto >= 0 ? "+" : ""}{moeda(maiorDesvio.realizado - maiorDesvio.previsto)}</p><p className="mt-1 text-xs text-muted-foreground">realizado vs. orçado</p></> : <p className="mt-1 text-sm text-muted-foreground">Sem movimentos no período.</p>}
+          </div>
+        </CardBody>
       </Card>
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -375,4 +425,11 @@ export default async function DashboardPage({ empresaId }: { empresaId?: string 
       </div>
     </>
   );
+}
+
+function ComparativoExecutivo({ rotulo, realizado, previsto, favoravelMaior }: { rotulo: string; realizado: number; previsto: number; favoravelMaior: boolean }) {
+  const desvio = realizado - previsto;
+  const favoravel = favoravelMaior ? desvio >= 0 : desvio <= 0;
+  const percentualExecucao = previsto !== 0 ? (realizado / Math.abs(previsto)) * 100 : 0;
+  return <div className="space-y-2"><div className="flex items-center justify-between gap-3"><p className="text-sm font-medium">{rotulo}</p><span className={cn("text-xs font-medium tabular", favoravel ? "text-positive" : "text-negative")}>{desvio >= 0 ? "+" : ""}{percentual(previsto !== 0 ? (desvio / Math.abs(previsto)) * 100 : null)}</span></div><p className="text-xl font-semibold tabular">{moeda(realizado)}</p><div className="h-2 overflow-hidden rounded-full bg-surface-muted"><div className={cn("h-full rounded-full", favoravel ? "bg-positive" : "bg-negative")} style={{ width: `${Math.min(Math.abs(percentualExecucao), 100)}%` }} /></div><p className="text-xs text-muted-foreground">Orçado: {moeda(previsto)} · {percentual(percentualExecucao, 0)} executado</p></div>;
 }

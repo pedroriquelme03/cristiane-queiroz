@@ -1,8 +1,9 @@
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Kpi } from "@/components/ui/kpi";
-import { getCompetenciaAtual, getDre, intervaloDoMes } from "@/lib/dados";
+import { RegistrosGrupoInterativos } from "@/components/financeiro/dre-interativa";
+import { getCompetenciaAtual, getDre, getLancamentos, intervaloDoMes } from "@/lib/dados";
 import { competenciaExtenso, moeda, percentual } from "@/lib/format";
-import type { GrupoDre, LinhaDre } from "@/lib/types";
+import type { GrupoDre } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const NOME_GRUPO: Record<GrupoDre, string> = {
@@ -65,7 +66,10 @@ export default async function DrePage({
   const empresaId = typeof empresa === "string" ? empresa : undefined;
   const competencia = await getCompetenciaAtual();
   const { inicio, fim } = intervaloDoMes(competencia);
-  const linhas = await getDre(inicio, fim, empresaId);
+  const [linhas, lancamentos] = await Promise.all([
+    getDre(inicio, fim, empresaId),
+    getLancamentos(inicio, fim, empresaId),
+  ]);
 
   const porGrupo = (grupo: GrupoDre) =>
     linhas.filter((l) => l.grupoDre === grupo && (l.realizado !== 0 || l.previsto !== 0));
@@ -167,11 +171,12 @@ export default async function DrePage({
                   if (contas.length === 0) return null;
 
                   return (
-                    <RegistrosGrupo
+                    <RegistrosGrupoInterativos
                       key={bloco.grupo}
                       titulo={NOME_GRUPO[bloco.grupo]}
                       contas={contas}
-                      av={av}
+                      lancamentos={lancamentos}
+                      receitaBruta={receitaBruta}
                     />
                   );
                 })}
@@ -180,69 +185,6 @@ export default async function DrePage({
           </div>
         </CardBody>
       </Card>
-    </>
-  );
-}
-
-function RegistrosGrupo({
-  titulo,
-  contas,
-  av,
-}: {
-  titulo: string;
-  contas: LinhaDre[];
-  av: (valor: number) => number;
-}) {
-  const totalReal = contas.reduce((s, c) => s + c.realizado, 0);
-  const totalPrev = contas.reduce((s, c) => s + c.previsto, 0);
-
-  return (
-    <>
-      <tr className="border-b border-border bg-surface">
-        <th scope="rowgroup" className="px-5 pt-4 pb-2 text-left text-xs font-semibold tracking-wide uppercase">
-          {titulo}
-        </th>
-        <td className="tabular px-3 pt-4 pb-2 text-right text-sm font-semibold">
-          {moeda(totalReal)}
-        </td>
-        <td className="tabular px-3 pt-4 pb-2 text-right text-xs text-muted-foreground">
-          {percentual(av(totalReal))}
-        </td>
-        <td className="tabular px-3 pt-4 pb-2 text-right text-sm text-muted-foreground">
-          {moeda(totalPrev)}
-        </td>
-        <td className="tabular px-5 pt-4 pb-2 text-right text-sm">
-          {moeda(totalReal - totalPrev)}
-        </td>
-      </tr>
-      {contas.map((conta) => {
-        const desvio = conta.realizado - conta.previsto;
-        return (
-          <tr key={conta.planoContaId} className="border-b border-border last:border-0">
-            <th scope="row" className="py-2 pr-3 pl-9 text-left font-normal">
-              <span className="tabular text-xs text-muted-foreground">{conta.codigo}</span>{" "}
-              {conta.conta}
-            </th>
-            <td className="tabular px-3 py-2 text-right">{moeda(conta.realizado)}</td>
-            <td className="tabular px-3 py-2 text-right text-muted-foreground">
-              {percentual(av(conta.realizado))}
-            </td>
-            <td className="tabular px-3 py-2 text-right text-muted-foreground">
-              {moeda(conta.previsto)}
-            </td>
-            <td
-              className={cn(
-                "tabular px-5 py-2 text-right",
-                Math.abs(desvio) > Math.abs(conta.previsto) * 0.1 && desvio !== 0
-                  ? "font-medium text-warning"
-                  : "text-muted-foreground",
-              )}
-            >
-              {moeda(desvio)}
-            </td>
-          </tr>
-        );
-      })}
     </>
   );
 }

@@ -35,6 +35,7 @@ const ROTAS_RECURSO: { prefixo: string; recurso: RecursoPlano }[] = [
   { prefixo: "/assinatura", recurso: "assinatura" },
   { prefixo: "/empresa", recurso: "empresa" },
   { prefixo: "/financeiro/dre", recurso: "financeiro-avancado" },
+  { prefixo: "/financeiro/receitas", recurso: "financeiro-avancado" },
   { prefixo: "/financeiro/orcamento", recurso: "financeiro-avancado" },
   { prefixo: "/financeiro/importar", recurso: "financeiro-avancado" },
   { prefixo: "/financeiro", recurso: "financeiro-basico" },
