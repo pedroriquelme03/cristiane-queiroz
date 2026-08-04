@@ -4,6 +4,14 @@ import { resolve } from "node:path";
 
 import { createClient } from "@supabase/supabase-js";
 
+/**
+ * Dados demonstrativos reais, isolados por empresa no Supabase.
+ *
+ * A allowlist EMPRESAS_DEMO impede que este script escreva em clientes reais.
+ * Assinaturas e acessos nunca sao alterados. Os UUIDs deterministicos tornam
+ * novas execucoes idempotentes para o mesmo mes de referencia.
+ */
+
 type Segmento = "geral" | "hotelaria" | "comercio" | "servicos" | "industria" | "alimentacao";
 type GrupoDre =
   | "receita_bruta"
@@ -35,13 +43,6 @@ interface PlanoContaSeed {
   grupo_dre: GrupoDre;
 }
 
-interface PlanoSeedSalvo {
-  id: string;
-  nome: string;
-  preco_mensal: number | string;
-  preco_anual: number | string | null;
-}
-
 loadEnvLocal();
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -57,10 +58,17 @@ const supabase = createClient(supabaseUrl, serviceRoleKey, {
 
 const hoje = new Date();
 const competenciaAtual = inicioMes(hoje);
-const competencias = Array.from({ length: 6 }, (_, index) => {
-  const data = new Date(hoje.getFullYear(), hoje.getMonth() - (5 - index), 1);
+const competencias = Array.from({ length: 12 }, (_, index) => {
+  const data = new Date(hoje.getFullYear(), hoje.getMonth() - (11 - index), 1);
   return iso(data);
 });
+
+const EMPRESAS_DEMO = new Set([
+  "TESTE ESSENCIAL",
+  "TESTE PROFISSIONAL",
+  "TESTE ENTERPRISE",
+]);
+const empresaSolicitada = argumentoEmpresa();
 
 const planoContas: PlanoContaSeed[] = [
   { codigo: "3.1.01", nome: "Receita de vendas", tipo: "receita", grupo_dre: "receita_bruta" },
@@ -78,126 +86,52 @@ const planoContas: PlanoContaSeed[] = [
 const areas: Area[] = ["financeiro", "compras", "estoque", "comercial", "rh", "processos", "tecnologia", "gestao"];
 
 async function main() {
-  const empresas = await listarOuCriarEmpresas();
-  const planos = await garantirPlanos();
+  const empresas = await listarEmpresasDemo();
 
-  for (const [index, empresa] of empresas.entries()) {
-    const plano = planos[index % planos.length];
-    await seedEmpresa(empresa, plano, index);
+  for (const empresa of empresas) {
+    await seedEmpresa(empresa, indiceEmpresa(empresa));
   }
 
-  console.log(`Seed concluido para ${empresas.length} empresa(s).`);
+  console.log(`Demo concluida para ${empresas.length} empresa(s) de teste.`);
 }
 
-async function listarOuCriarEmpresas(): Promise<EmpresaSeed[]> {
+async function listarEmpresasDemo(): Promise<EmpresaSeed[]> {
   const { data, error } = await supabase
     .from("empresas")
     .select("id, razao_social, nome_fantasia, cnpj, segmento")
     .order("razao_social");
 
   if (error) throw error;
-  if (data && data.length > 0) return data as EmpresaSeed[];
+  const empresas = (data ?? []).filter((empresa) => {
+    const nome = (empresa.nome_fantasia ?? empresa.razao_social).trim().toUpperCase();
+    return EMPRESAS_DEMO.has(nome);
+  }) as EmpresaSeed[];
 
-  const empresa = {
-    id: uuid("empresa:cq-demo"),
-    razao_social: "Cliente Demonstração Ltda.",
-    nome_fantasia: "Cliente Demonstração",
-    cnpj: "00000000000191",
-    segmento: "servicos" satisfies Segmento,
-    regime_tributario: "simples",
-    data_abertura: "2022-01-10",
-    qtd_funcionarios: 12,
-    ativo: true,
-  };
+  const empresasAlvo = empresaSolicitada ? new Set([empresaSolicitada]) : EMPRESAS_DEMO;
+  const filtradas = empresas.filter((empresa) => {
+    const nome = (empresa.nome_fantasia ?? empresa.razao_social).trim().toUpperCase();
+    return empresasAlvo.has(nome);
+  });
 
-  const { data: criada, error: insertError } = await supabase
-    .from("empresas")
-    .upsert(empresa, { onConflict: "cnpj" })
-    .select("id, razao_social, nome_fantasia, cnpj, segmento")
-    .single();
-
-  if (insertError) throw insertError;
-  return [criada as EmpresaSeed];
-}
-
-async function garantirPlanos(): Promise<PlanoSeedSalvo[]> {
-  const sementes = [
-    {
-      nome: "Essencial",
-      descricao: "Gestao financeira essencial para empresas em organizacao.",
-      preco_mensal: 297,
-      preco_anual: 2970,
-      trial_dias: 14,
-      recursos: ["Dashboard executivo", "Fluxo de caixa", "Contas a pagar e receber"],
-      limite_usuarios: 3,
-      limite_empresas: 1,
-      publico: true,
-      ativo: true,
-      ordem: 1,
-    },
-    {
-      nome: "Profissional",
-      descricao: "Gestao completa com acompanhamento consultivo.",
-      preco_mensal: 597,
-      preco_anual: 5970,
-      trial_dias: 14,
-      recursos: ["DRE gerencial", "Indicadores", "Plano de acao", "Diagnostico e maturidade"],
-      limite_usuarios: 10,
-      limite_empresas: 3,
-      publico: true,
-      ativo: true,
-      ordem: 2,
-    },
-    {
-      nome: "Enterprise",
-      descricao: "Operacao multiempresa com consultoria dedicada.",
-      preco_mensal: 1197,
-      preco_anual: 11970,
-      trial_dias: 0,
-      recursos: ["Usuarios ilimitados", "Documentos", "Reunioes e treinamentos"],
-      limite_usuarios: null,
-      limite_empresas: null,
-      publico: true,
-      ativo: true,
-      ordem: 3,
-    },
-  ];
-
-  const planos = [];
-
-  for (const semente of sementes) {
-    const { data: existente, error: selectError } = await supabase
-      .from("planos")
-      .select("id, nome, preco_mensal, preco_anual")
-      .eq("nome", semente.nome)
-      .maybeSingle();
-
-    if (selectError) throw selectError;
-    if (existente) {
-      planos.push(existente);
-      continue;
-    }
-
-    const { data: criado, error: insertError } = await supabase
-      .from("planos")
-      .insert({ id: uuid(`plano:${semente.nome}`), ...semente })
-      .select("id, nome, preco_mensal, preco_anual")
-      .single();
-
-    if (insertError) throw insertError;
-    planos.push(criado);
+  if (filtradas.length !== empresasAlvo.size) {
+    const encontradas = new Set(empresas.map((empresa) =>
+      (empresa.nome_fantasia ?? empresa.razao_social).trim().toUpperCase(),
+    ));
+    const faltantes = [...empresasAlvo].filter((nome) => !encontradas.has(nome));
+    throw new Error(`Empresas demo nao encontradas: ${faltantes.join(", ")}.`);
   }
 
-  return planos;
+  return filtradas;
 }
 
-async function seedEmpresa(empresa: EmpresaSeed, plano: PlanoSeedSalvo, offset: number) {
+async function seedEmpresa(empresa: EmpresaSeed, offset: number) {
   console.log(`Alimentando ${empresa.nome_fantasia ?? empresa.razao_social}...`);
 
   const contas = await garantirPlanoContas(empresa.id);
-  await garantirContaBancaria(empresa.id, offset);
-  await garantirLancamentos(empresa.id, contas, offset);
-  await garantirTitulos(empresa.id, contas, offset);
+  await garantirEstrutura(empresa);
+  await garantirContaBancaria(empresa);
+  await garantirLancamentos(empresa, contas);
+  await garantirTitulos(empresa, contas);
   await garantirOrcamento(empresa.id, contas, offset);
   await garantirIndicadores(empresa.id, offset);
   await garantirPlanosAcao(empresa.id, offset);
@@ -205,8 +139,7 @@ async function seedEmpresa(empresa: EmpresaSeed, plano: PlanoSeedSalvo, offset: 
   await garantirMaturidade(empresa.id, offset);
   await garantirDocumentos(empresa.id, offset);
   await garantirReunioes(empresa.id, offset);
-  await garantirAlertas(empresa.id, offset);
-  await garantirAssinaturaEFaturas(empresa.id, plano, offset);
+  await garantirAlertas(empresa);
 }
 
 async function garantirPlanoContas(empresaId: string) {
@@ -232,39 +165,206 @@ async function garantirPlanoContas(empresaId: string) {
   return data ?? [];
 }
 
-async function garantirContaBancaria(empresaId: string, offset: number) {
+async function garantirEstrutura(empresa: EmpresaSeed) {
+  const nome = (empresa.nome_fantasia ?? empresa.razao_social).trim().toUpperCase();
+  const perfil = nome.includes("ENTERPRISE")
+    ? {
+        colaboradores: 32,
+        unidades: [
+          ["Hotel Centro", "matriz", "Foz do Iguacu", "PR"],
+          ["Hotel Cataratas", "filial", "Foz do Iguacu", "PR"],
+        ],
+        areas: [
+          ["Administrativo", [["Gerencia", 2], ["Financeiro", 4]]],
+          ["Hospedagem", [["Recepcao", 6], ["Governanca", 6]]],
+          ["Alimentos e bebidas", [["Cozinha", 4], ["Salao", 4]]],
+          ["Comercial", [["Vendas", 4], ["Marketing", 2]]],
+        ],
+      }
+    : nome.includes("PROFISSIONAL")
+      ? {
+          colaboradores: 18,
+          unidades: [["Pousada Principal", "matriz", "Foz do Iguacu", "PR"]],
+          areas: [
+            ["Administrativo", [["Gestao", 2], ["Financeiro", 2]]],
+            ["Hospedagem", [["Recepcao", 4], ["Governanca", 4]]],
+            ["Alimentos e bebidas", [["Cozinha", 3], ["Salao", 3]]],
+          ],
+        }
+      : {
+          colaboradores: 8,
+          unidades: [["Loja Principal", "matriz", "Foz do Iguacu", "PR"]],
+          areas: [
+            ["Administrativo", [["Financeiro", 2]]],
+            ["Comercial", [["Vendas", 3]]],
+            ["Operacoes", [["Atendimento", 3]]],
+          ],
+        };
+
+  const { error: empresaError } = await supabase
+    .from("empresas")
+    .update({ qtd_funcionarios: perfil.colaboradores })
+    .eq("id", empresa.id);
+  if (empresaError) throw empresaError;
+
+  const unidades = perfil.unidades.map(([unidadeNome, tipo, cidade, uf]) => ({
+    id: uuid(`demo:unidade:${empresa.id}:${unidadeNome}`),
+    empresa_id: empresa.id,
+    nome: unidadeNome,
+    tipo,
+    cidade,
+    uf,
+    ativo: true,
+  }));
+  const { error: unidadesError } = await supabase.from("unidades").upsert(unidades);
+  if (unidadesError) throw unidadesError;
+
+  for (const [areaIndex, [areaNome, cargos]] of perfil.areas.entries()) {
+    const areaId = uuid(`demo:area:${empresa.id}:${areaNome}`);
+    const { error: areaError } = await supabase.from("estrutura_areas").upsert(
+      { id: areaId, empresa_id: empresa.id, nome: areaNome, ordem: areaIndex },
+      { onConflict: "empresa_id,nome" },
+    );
+    if (areaError) throw areaError;
+
+    const registrosCargos = (cargos as [string, number][]).map(([cargoNome, quantidade], cargoIndex) => ({
+      id: uuid(`demo:cargo:${empresa.id}:${areaNome}:${cargoNome}`),
+      empresa_id: empresa.id,
+      area_id: areaId,
+      nome: cargoNome,
+      quantidade,
+      ordem: cargoIndex,
+    }));
+    const { error: cargosError } = await supabase
+      .from("estrutura_cargos")
+      .upsert(registrosCargos, { onConflict: "area_id,nome" });
+    if (cargosError) throw cargosError;
+  }
+}
+
+async function garantirContaBancaria(empresa: EmpresaSeed) {
+  const empresaId = empresa.id;
+  const perfil = tipoPerfil(empresa);
+  const conta = perfil === "essencial"
+    ? { nome: "Conta operacional", banco: "Banco do Brasil", saldo: 10000 }
+    : perfil === "profissional"
+      ? { nome: "Conta corrente principal", banco: "Sicredi", saldo: 28000 }
+      : { nome: "Conta consolidada da rede", banco: "Itau", saldo: 65000 };
   const { error } = await supabase.from("contas_bancarias").upsert({
     id: uuid(`conta-bancaria:${empresaId}:principal`),
     empresa_id: empresaId,
-    nome: "Conta principal",
-    banco: "Banco exemplo",
+    nome: conta.nome,
+    banco: conta.banco,
     tipo: "corrente",
-    saldo_inicial: 18000 + offset * 3500,
+    saldo_inicial: conta.saldo,
     ativo: true,
   });
 
   if (error) throw error;
 }
 
-async function garantirLancamentos(empresaId: string, contas: { id: string; codigo: string }[], offset: number) {
+async function garantirLancamentos(empresa: EmpresaSeed, contas: { id: string; codigo: string }[]) {
+  const empresaId = empresa.id;
   const conta = (codigo: string) => contas.find((item) => item.codigo === codigo)?.id ?? null;
   const registros = competencias.flatMap((competencia, index) => {
-    const fator = 1 + offset * 0.08 + index * 0.025;
     const base = new Date(`${competencia}T12:00:00`);
     const dia = (n: number) => iso(new Date(base.getFullYear(), base.getMonth(), n));
+    const perfil = perfilFinanceiro(empresa, base, index);
     return [
-      lancamento(empresaId, competencia, "vendas", dia(5), "entrada", 42000 * fator, "Recebimento de vendas", "Clientes", conta("3.1.01")),
-      lancamento(empresaId, competencia, "servicos", dia(12), "entrada", 9800 * fator, "Recebimento de servicos", "Clientes", conta("3.1.02")),
-      lancamento(empresaId, competencia, "impostos", dia(16), "saida", 5200 * fator, "Impostos sobre vendas", "Receita Federal", conta("4.1.01")),
-      lancamento(empresaId, competencia, "insumos", dia(18), "saida", 14500 * fator, "Compra de insumos", "Fornecedores", conta("4.2.01")),
-      lancamento(empresaId, competencia, "folha", dia(25), "saida", 12600 * fator, "Folha de pagamento", "Equipe", conta("5.1.01")),
-      lancamento(empresaId, competencia, "aluguel", dia(10), "saida", 4800 * fator, "Aluguel", "Imobiliaria", conta("5.2.01")),
-      lancamento(empresaId, competencia, "marketing", dia(20), "saida", 2200 * fator, "Campanhas comerciais", "Agencia", conta("5.3.01")),
+      lancamento(empresaId, competencia, "vendas", dia(5), "entrada", perfil.vendas, perfil.descricoes[0], perfil.contrapartes[0], conta("3.1.01")),
+      lancamento(empresaId, competencia, "servicos", dia(12), "entrada", perfil.servicos, perfil.descricoes[1], perfil.contrapartes[1], conta("3.1.02")),
+      lancamento(empresaId, competencia, "impostos", dia(16), "saida", perfil.impostos, "Impostos e taxas sobre faturamento", "Receita Federal", conta("4.1.01")),
+      lancamento(empresaId, competencia, "insumos", dia(18), "saida", perfil.insumos, perfil.descricoes[2], perfil.contrapartes[2], conta("4.2.01")),
+      lancamento(empresaId, competencia, "folha", dia(25), "saida", perfil.folha, "Folha de pagamento e encargos", "Equipe", conta("5.1.01")),
+      lancamento(empresaId, competencia, "aluguel", dia(10), "saida", perfil.aluguel, perfil.descricoes[3], perfil.contrapartes[3], conta("5.2.01")),
+      lancamento(empresaId, competencia, "marketing", dia(20), "saida", perfil.marketing, perfil.descricoes[4], perfil.contrapartes[4], conta("5.3.01")),
     ];
   });
 
   const { error } = await supabase.from("lancamentos").upsert(registros);
   if (error) throw error;
+}
+
+function perfilFinanceiro(empresa: EmpresaSeed, competencia: Date, index: number) {
+  const perfil = tipoPerfil(empresa);
+  if (perfil === "essencial") return perfilFinanceiroEssencial(competencia);
+
+  if (perfil === "profissional") {
+    const receita = 59000 + index * 1700;
+    const despesas = 46500 + index * 850;
+    return distribuirPerfilFinanceiro(
+      receita,
+      despesas,
+      [0.42, 0.58],
+      [0.09, 0.28, 0.34, 0.17, 0.12],
+      ["Receita de hospedagens", "Eventos e experiencias", "Enxoval e cafe da manha", "Arrendamento da pousada", "Comissoes de agencias"],
+      ["Hospedes e agencias", "Eventos corporativos", "Fornecedores locais", "Administradora do imovel", "Canais de reserva"],
+    );
+  }
+
+  const sazonalidade = [0, 2500, -1800, 3200, 6000, 8500, 12000, 14500, 9000, 7000, 10500, 16000][index] ?? 0;
+  const receita = 118000 + index * 3200 + sazonalidade;
+  const despesas = 79000 + index * 1900;
+  return distribuirPerfilFinanceiro(
+    receita,
+    despesas,
+    [0.36, 0.64],
+    [0.11, 0.3, 0.31, 0.14, 0.14],
+    ["Receita consolidada de hospedagem", "Eventos, restaurante e experiencias", "Operacao de hospedagem e A&B", "Locacao das unidades", "Campanhas nacionais e OTAs"],
+    ["Hospedes, agencias e operadoras", "Eventos e grupos", "Central de suprimentos", "Administradoras das unidades", "Agencias e plataformas"],
+  );
+}
+
+function perfilFinanceiroEssencial(competencia: Date) {
+  const mes = competencia.getMonth();
+  const anoAtual = hoje.getFullYear();
+  let receita: number;
+  let despesas: number;
+
+  if (competencia.getFullYear() < anoAtual) {
+    receita = 62000 + Math.max(0, mes - 8) * 1000;
+    despesas = 50000 + Math.max(0, mes - 8) * 500;
+  } else if (mes === 0) {
+    receita = 68000;
+    despesas = 52000;
+  } else if (mes === 1) {
+    receita = 70000;
+    despesas = 54000;
+  } else {
+    const mesesDesdeMarco = mes - 2;
+    receita = 62000 - mesesDesdeMarco * 3500;
+    despesas = 65000 + mesesDesdeMarco * 1800;
+  }
+
+  return distribuirPerfilFinanceiro(
+    receita,
+    despesas,
+    [0.88, 0.12],
+    [0.1, 0.35, 0.3, 0.13, 0.12],
+    ["Vendas da loja", "Encomendas e entregas", "Reposicao de mercadorias", "Aluguel do ponto comercial", "Divulgacao local"],
+    ["Clientes do varejo", "Clientes de encomendas", "Distribuidora regional", "Imobiliaria Centro", "Midia local"],
+  );
+}
+
+function distribuirPerfilFinanceiro(
+  receita: number,
+  despesas: number,
+  pesosReceita: [number, number],
+  pesosDespesa: [number, number, number, number, number],
+  descricoes: [string, string, string, string, string],
+  contrapartes: [string, string, string, string, string],
+) {
+  return {
+    vendas: receita * pesosReceita[0],
+    servicos: receita * pesosReceita[1],
+    impostos: despesas * pesosDespesa[0],
+    insumos: despesas * pesosDespesa[1],
+    folha: despesas * pesosDespesa[2],
+    aluguel: despesas * pesosDespesa[3],
+    marketing: despesas * pesosDespesa[4],
+    descricoes,
+    contrapartes,
+  };
 }
 
 function lancamento(
@@ -291,16 +391,36 @@ function lancamento(
   };
 }
 
-async function garantirTitulos(empresaId: string, contas: { id: string; codigo: string }[], offset: number) {
+async function garantirTitulos(empresa: EmpresaSeed, contas: { id: string; codigo: string }[]) {
+  const empresaId = empresa.id;
   const conta = (codigo: string) => contas.find((item) => item.codigo === codigo)?.id ?? null;
-  const registros = [
-    titulo(empresaId, "receber", "Cliente Alpha", -12, 7200 + offset * 350, 0, "aberto", conta("3.1.01")),
-    titulo(empresaId, "receber", "Cliente Beta", 8, 5400 + offset * 300, 0, "aberto", conta("3.1.02")),
-    titulo(empresaId, "receber", "Cliente Gamma", -28, 4100 + offset * 220, 4100 + offset * 220, "pago", conta("3.1.01")),
-    titulo(empresaId, "pagar", "Fornecedor Central", -5, 3800 + offset * 200, 0, "aberto", conta("4.2.01")),
-    titulo(empresaId, "pagar", "Energia e internet", 6, 1450 + offset * 120, 0, "aberto", conta("5.2.02")),
-    titulo(empresaId, "pagar", "Marketing", -20, 2200 + offset * 180, 2200 + offset * 180, "pago", conta("5.3.01")),
-  ];
+  const perfil = tipoPerfil(empresa);
+  const registros = perfil === "essencial"
+    ? [
+        titulo(empresaId, "receber-alpha", "receber", "Mercado Boa Compra", -18, 5800, 0, "aberto", conta("3.1.01")),
+        titulo(empresaId, "receber-beta", "receber", "Condominio Primavera", 10, 3200, 0, "aberto", conta("3.1.02")),
+        titulo(empresaId, "receber-gamma", "receber", "Cliente balcao", -30, 1850, 1850, "pago", conta("3.1.01")),
+        titulo(empresaId, "pagar-fornecedor", "pagar", "Distribuidora Regional", -9, 12500, 0, "aberto", conta("4.2.01")),
+        titulo(empresaId, "pagar-energia", "pagar", "Energia da loja", 4, 6400, 0, "aberto", conta("5.2.02")),
+        titulo(empresaId, "pagar-marketing", "pagar", "Midia Local", -22, 2100, 2100, "pago", conta("5.3.01")),
+      ]
+    : perfil === "profissional"
+      ? [
+          titulo(empresaId, "receber-alpha", "receber", "Agencia Rota Sul", -6, 8900, 2500, "parcial", conta("3.1.02")),
+          titulo(empresaId, "receber-beta", "receber", "Grupo Executivo Parana", 12, 12800, 0, "aberto", conta("3.1.02")),
+          titulo(empresaId, "receber-gamma", "receber", "Hospedagens diretas", -24, 7350, 7350, "pago", conta("3.1.01")),
+          titulo(empresaId, "pagar-fornecedor", "pagar", "Enxovais Cataratas", 7, 5200, 0, "aberto", conta("4.2.01")),
+          titulo(empresaId, "pagar-energia", "pagar", "Copel", 15, 2380, 0, "aberto", conta("5.2.02")),
+          titulo(empresaId, "pagar-marketing", "pagar", "Portal de Reservas", -16, 3150, 3150, "pago", conta("5.3.01")),
+        ]
+      : [
+          titulo(empresaId, "receber-alpha", "receber", "Operadora Destinos Brasil", 5, 28600, 0, "aberto", conta("3.1.02")),
+          titulo(empresaId, "receber-beta", "receber", "Congresso Mercosul", 18, 41700, 0, "aberto", conta("3.1.02")),
+          titulo(empresaId, "receber-gamma", "receber", "Rede Global Travel", -14, 22400, 22400, "pago", conta("3.1.01")),
+          titulo(empresaId, "pagar-fornecedor", "pagar", "Central de Suprimentos Hoteleiros", 9, 16400, 0, "aberto", conta("4.2.01")),
+          titulo(empresaId, "pagar-energia", "pagar", "Energia das unidades", 14, 7850, 0, "aberto", conta("5.2.02")),
+          titulo(empresaId, "pagar-marketing", "pagar", "Campanha Temporada Brasil", -12, 9800, 9800, "pago", conta("5.3.01")),
+        ];
 
   const { error } = await supabase.from("titulos").upsert(registros);
   if (error) throw error;
@@ -308,6 +428,7 @@ async function garantirTitulos(empresaId: string, contas: { id: string; codigo: 
 
 function titulo(
   empresaId: string,
+  chave: string,
   tipo: "pagar" | "receber",
   contraparte: string,
   vencimentoOffset: number,
@@ -318,7 +439,7 @@ function titulo(
 ) {
   const vencimento = dataRelativa(vencimentoOffset);
   return {
-    id: uuid(`titulo:${empresaId}:${tipo}:${contraparte}:${vencimento}`),
+    id: uuid(`demo:titulo:${empresaId}:${competenciaAtual}:${chave}`),
     empresa_id: empresaId,
     tipo,
     contraparte,
@@ -562,90 +683,35 @@ async function garantirReunioes(empresaId: string, offset: number) {
   if (error) throw error;
 }
 
-async function garantirAlertas(empresaId: string, offset: number) {
-  const registros = [
-    {
-      id: uuid(`alerta:${empresaId}:receber`),
-      empresa_id: empresaId,
-      tipo: "financeiro",
-      severidade: "atencao",
-      titulo: "Recebimentos vencidos",
-      descricao: "Existem titulos a receber vencidos que precisam de cobranca ativa.",
-      resolvido: false,
-    },
-    {
-      id: uuid(`alerta:${empresaId}:caixa`),
-      empresa_id: empresaId,
-      tipo: "financeiro",
-      severidade: offset % 2 === 0 ? "info" : "atencao",
-      titulo: "Acompanhar caixa projetado",
-      descricao: "Revise os compromissos dos proximos dias e confirme entradas previstas.",
-      resolvido: false,
-    },
-  ];
+async function garantirAlertas(empresa: EmpresaSeed) {
+  const empresaId = empresa.id;
+  const perfil = tipoPerfil(empresa);
+  const conteudo = perfil === "essencial"
+    ? [
+        ["critico", "Inadimplencia pressionando o caixa", "Recebimentos atrasados e contas vencidas exigem um plano imediato de regularizacao."],
+        ["critico", "Caixa operacional negativo", "As saidas superam as entradas desde marco e o saldo projetado permanece negativo."],
+      ]
+    : perfil === "profissional"
+      ? [
+          ["atencao", "Recebimento parcial de agencia", "Uma agencia ainda possui saldo pendente; acompanhe a liquidacao nesta semana."],
+          ["info", "Margem operacional estavel", "A operacao mantem resultado positivo, com oportunidade de revisar comissoes dos canais de reserva."],
+        ]
+      : [
+          ["info", "Entradas relevantes previstas", "Eventos e operadoras concentram recebimentos importantes nas proximas semanas."],
+          ["info", "Caixa projetado confortavel", "A rede possui cobertura para os compromissos mapeados no horizonte de 90 dias."],
+        ];
+  const registros = conteudo.map(([severidade, titulo, descricao], index) => ({
+    id: uuid(`alerta:${empresaId}:${index === 0 ? "receber" : "caixa"}`),
+    empresa_id: empresaId,
+    tipo: "financeiro",
+    severidade,
+    titulo,
+    descricao,
+    resolvido: false,
+  }));
 
   const { error } = await supabase.from("alertas").upsert(registros);
   if (error) throw error;
-}
-
-async function garantirAssinaturaEFaturas(empresaId: string, plano: PlanoSeedSalvo, offset: number) {
-  const assinaturaId = uuid(`assinatura:${empresaId}`);
-  const vencida = offset % 3 === 0;
-  const valorPlano = arredondarMoeda(plano.preco_mensal);
-
-  const { error } = await supabase.from("assinaturas").upsert(
-    {
-      id: assinaturaId,
-      empresa_id: empresaId,
-      plano_id: plano.id,
-      ciclo: "mensal",
-      status: "ativa",
-      dia_vencimento: 5,
-      carencia_dias: 7,
-      inicio: dataRelativa(-120),
-      trial_fim: null,
-      bloqueio_manual: false,
-      cancelada_em: null,
-    },
-    { onConflict: "empresa_id" },
-  );
-  if (error) throw error;
-
-  const registros = [
-    {
-      id: uuid(`fatura:${empresaId}:${competenciaAtual}`),
-      assinatura_id: assinaturaId,
-      empresa_id: empresaId,
-      competencia: competenciaAtual,
-      emissao: dataRelativa(-12),
-      vencimento: vencida ? dataRelativa(-4) : dataRelativa(9),
-      valor: valorPlano,
-      valor_pago: 0,
-      status: "aberta",
-      pago_em: null,
-      metodo_pagamento: null,
-      referencia_externa: null,
-      observacao: null,
-    },
-    {
-      id: uuid(`fatura:${empresaId}:${competencias[competencias.length - 2]}`),
-      assinatura_id: assinaturaId,
-      empresa_id: empresaId,
-      competencia: competencias[competencias.length - 2],
-      emissao: dataRelativa(-42),
-      vencimento: dataRelativa(-30),
-      valor: valorPlano,
-      valor_pago: valorPlano,
-      status: "paga",
-      pago_em: dataRelativa(-28),
-      metodo_pagamento: "pix",
-      referencia_externa: null,
-      observacao: null,
-    },
-  ];
-
-  const { error: faturasError } = await supabase.from("faturas").upsert(registros);
-  if (faturasError) throw faturasError;
 }
 
 function uuid(seed: string) {
@@ -657,6 +723,32 @@ function uuid(seed: string) {
     `${((parseInt(hex.slice(16, 18), 16) & 0x3f) | 0x80).toString(16)}${hex.slice(18, 20)}`,
     hex.slice(20, 32),
   ].join("-");
+}
+
+function tipoPerfil(empresa: EmpresaSeed): "essencial" | "profissional" | "enterprise" {
+  const nome = (empresa.nome_fantasia ?? empresa.razao_social).trim().toUpperCase();
+  if (nome.includes("ESSENCIAL")) return "essencial";
+  if (nome.includes("PROFISSIONAL")) return "profissional";
+  return "enterprise";
+}
+
+function indiceEmpresa(empresa: EmpresaSeed) {
+  const nome = (empresa.nome_fantasia ?? empresa.razao_social).trim().toUpperCase();
+  if (nome.includes("ENTERPRISE")) return 0;
+  if (nome.includes("ESSENCIAL")) return 1;
+  return 2;
+}
+
+function argumentoEmpresa() {
+  const prefixo = "--empresa=";
+  const argumento = process.argv.find((item) => item.startsWith(prefixo));
+  if (!argumento) return null;
+
+  const nome = argumento.slice(prefixo.length).trim().toUpperCase();
+  if (!EMPRESAS_DEMO.has(nome)) {
+    throw new Error(`Empresa demo invalida: ${nome}.`);
+  }
+  return nome;
 }
 
 function loadEnvLocal() {
@@ -689,10 +781,6 @@ function dataRelativa(dias: number) {
 
 function iso(data: Date) {
   return data.toISOString().slice(0, 10);
-}
-
-function arredondarMoeda(valor: number | string) {
-  return Math.round(Number(valor) * 100) / 100;
 }
 
 main().catch((error) => {
