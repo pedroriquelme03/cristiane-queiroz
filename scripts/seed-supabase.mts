@@ -78,8 +78,10 @@ const planoContas: PlanoContaSeed[] = [
 const areas: Area[] = ["financeiro", "compras", "estoque", "comercial", "rh", "processos", "tecnologia", "gestao"];
 
 async function main() {
-  const empresas = await listarOuCriarEmpresas();
+  let empresas = await listarOuCriarEmpresas();
   const planos = await garantirPlanos();
+
+  empresas = await criarEmpresasParaUsuariosSemVinculo(empresas);
 
   for (const [index, empresa] of empresas.entries()) {
     const plano = planos[index % planos.length];
@@ -87,6 +89,82 @@ async function main() {
   }
 
   console.log(`Seed concluido para ${empresas.length} empresa(s).`);
+}
+
+/**
+ * Contas de cliente antigas podem ter sido criadas depois que os mocks foram
+ * removidos, ficando sem tenant e, por consequencia, com todas as telas vazias.
+ * Mantemos vinculos existentes e criamos um tenant de demonstracao exclusivo
+ * para cada usuario sem empresa, garantindo dados diferentes entre eles.
+ */
+async function criarEmpresasParaUsuariosSemVinculo(empresas: EmpresaSeed[]): Promise<EmpresaSeed[]> {
+  const [{ data: perfis, error: perfisError }, { data: vinculos, error: vinculosError }] =
+    await Promise.all([
+      supabase.from("profiles").select("id, nome, email, role").neq("role", "admin"),
+      supabase.from("empresa_membros").select("user_id"),
+    ]);
+
+  if (perfisError) throw perfisError;
+  if (vinculosError) throw vinculosError;
+
+  const usuariosVinculados = new Set((vinculos ?? []).map((vinculo) => vinculo.user_id));
+  const usuariosSemVinculo = (perfis ?? []).filter(
+    (perfil) => !usuariosVinculados.has(perfil.id),
+  );
+
+  if (usuariosSemVinculo.length === 0) return empresas;
+
+  const empresasDemo = usuariosSemVinculo.map((perfil, index) => {
+    const identificacao =
+      perfil.nome?.trim() || perfil.email?.split("@")[0] || `Usuario ${index + 1}`;
+    return {
+      id: uuid(`empresa-demo:usuario:${perfil.id}`),
+      razao_social: `Empresa Demonstracao - ${identificacao}`,
+      nome_fantasia: `Demo de ${identificacao}`,
+      cnpj: cnpjDemo(perfil.id),
+      segmento: "servicos" as const,
+      regime_tributario: "simples",
+      data_abertura: "2022-01-10",
+      qtd_funcionarios: 8 + index * 3,
+      ativo: true,
+    };
+  });
+
+  const { data: empresasCriadas, error: empresasError } = await supabase
+    .from("empresas")
+    .upsert(empresasDemo, { onConflict: "id" })
+    .select("id, razao_social, nome_fantasia, cnpj, segmento");
+
+  if (empresasError) throw empresasError;
+
+  const empresaPorId = new Map((empresasCriadas ?? []).map((empresa) => [empresa.id, empresa]));
+  const novosVinculos = usuariosSemVinculo.map((perfil) => ({
+    empresa_id: uuid(`empresa-demo:usuario:${perfil.id}`),
+    user_id: perfil.id,
+    papel: perfil.role === "consultor" ? "consultor" : "cliente",
+  }));
+
+  const { error } = await supabase
+    .from("empresa_membros")
+    .upsert(novosVinculos, { onConflict: "empresa_id,user_id" });
+
+  if (error) throw error;
+  console.log(`${novosVinculos.length} tenant(s) de demonstracao criado(s), um por usuario.`);
+
+  return [
+    ...empresas,
+    ...empresasDemo.map((empresa) => (empresaPorId.get(empresa.id) ?? empresa) as EmpresaSeed),
+  ];
+}
+
+function cnpjDemo(usuarioId: string) {
+  const digitos = createHash("sha256")
+    .update(`cnpj-demo:${usuarioId}`)
+    .digest("hex")
+    .replace(/\D/g, "")
+    .padEnd(14, "0")
+    .slice(0, 14);
+  return digitos === "00000000000000" ? "00000000000001" : digitos;
 }
 
 async function listarOuCriarEmpresas(): Promise<EmpresaSeed[]> {
