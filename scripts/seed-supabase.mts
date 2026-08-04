@@ -132,8 +132,8 @@ async function seedEmpresa(empresa: EmpresaSeed, offset: number) {
   await garantirContaBancaria(empresa);
   await garantirLancamentos(empresa, contas);
   await garantirTitulos(empresa, contas);
-  await garantirOrcamento(empresa.id, contas, offset);
-  await garantirIndicadores(empresa.id, offset);
+  await garantirOrcamento(empresa, contas);
+  await garantirIndicadores(empresa);
   await garantirPlanosAcao(empresa.id, offset);
   await garantirDiagnosticos(empresa.id, offset);
   await garantirMaturidade(empresa.id, offset);
@@ -271,12 +271,13 @@ async function garantirLancamentos(empresa: EmpresaSeed, contas: { id: string; c
     const dia = (n: number) => iso(new Date(base.getFullYear(), base.getMonth(), n));
     const perfil = perfilFinanceiro(empresa, base, index);
     return [
-      lancamento(empresaId, competencia, "vendas", dia(5), "entrada", perfil.vendas, perfil.descricoes[0], perfil.contrapartes[0], conta("3.1.01")),
-      lancamento(empresaId, competencia, "servicos", dia(12), "entrada", perfil.servicos, perfil.descricoes[1], perfil.contrapartes[1], conta("3.1.02")),
+      ...lancamentosDistribuidos(empresaId, competencia, "vendas", [3, 5, 7, 10, 13, 16, 19, 22, 25], "entrada", perfil.vendas, perfil.descricoes[0], perfil.contrapartes[0], conta("3.1.01")),
+      ...lancamentosDistribuidos(empresaId, competencia, "servicos", [2, 4, 8, 11, 14, 18, 21, 24, 27], "entrada", perfil.servicos, perfil.descricoes[1], perfil.contrapartes[1], conta("3.1.02")),
       lancamento(empresaId, competencia, "impostos", dia(16), "saida", perfil.impostos, "Impostos e taxas sobre faturamento", "Receita Federal", conta("4.1.01")),
       lancamento(empresaId, competencia, "insumos", dia(18), "saida", perfil.insumos, perfil.descricoes[2], perfil.contrapartes[2], conta("4.2.01")),
       lancamento(empresaId, competencia, "folha", dia(25), "saida", perfil.folha, "Folha de pagamento e encargos", "Equipe", conta("5.1.01")),
       lancamento(empresaId, competencia, "aluguel", dia(10), "saida", perfil.aluguel, perfil.descricoes[3], perfil.contrapartes[3], conta("5.2.01")),
+      lancamento(empresaId, competencia, "energia", dia(14), "saida", perfil.energia, "Energia, internet e utilidades", "Concessionarias e operadoras", conta("5.2.02")),
       lancamento(empresaId, competencia, "marketing", dia(20), "saida", perfil.marketing, perfil.descricoes[4], perfil.contrapartes[4], conta("5.3.01")),
     ];
   });
@@ -296,7 +297,7 @@ function perfilFinanceiro(empresa: EmpresaSeed, competencia: Date, index: number
       receita,
       despesas,
       [0.42, 0.58],
-      [0.09, 0.28, 0.34, 0.17, 0.12],
+      [0.09, 0.28, 0.34, 0.14, 0.05, 0.10],
       ["Receita de hospedagens", "Eventos e experiencias", "Enxoval e cafe da manha", "Arrendamento da pousada", "Comissoes de agencias"],
       ["Hospedes e agencias", "Eventos corporativos", "Fornecedores locais", "Administradora do imovel", "Canais de reserva"],
     );
@@ -309,7 +310,7 @@ function perfilFinanceiro(empresa: EmpresaSeed, competencia: Date, index: number
     receita,
     despesas,
     [0.36, 0.64],
-    [0.11, 0.3, 0.31, 0.14, 0.14],
+    [0.11, 0.3, 0.31, 0.12, 0.05, 0.11],
     ["Receita consolidada de hospedagem", "Eventos, restaurante e experiencias", "Operacao de hospedagem e A&B", "Locacao das unidades", "Campanhas nacionais e OTAs"],
     ["Hospedes, agencias e operadoras", "Eventos e grupos", "Central de suprimentos", "Administradoras das unidades", "Agencias e plataformas"],
   );
@@ -340,7 +341,7 @@ function perfilFinanceiroEssencial(competencia: Date) {
     receita,
     despesas,
     [0.88, 0.12],
-    [0.1, 0.35, 0.3, 0.13, 0.12],
+    [0.1, 0.35, 0.3, 0.11, 0.04, 0.10],
     ["Vendas da loja", "Encomendas e entregas", "Reposicao de mercadorias", "Aluguel do ponto comercial", "Divulgacao local"],
     ["Clientes do varejo", "Clientes de encomendas", "Distribuidora regional", "Imobiliaria Centro", "Midia local"],
   );
@@ -350,7 +351,7 @@ function distribuirPerfilFinanceiro(
   receita: number,
   despesas: number,
   pesosReceita: [number, number],
-  pesosDespesa: [number, number, number, number, number],
+  pesosDespesa: [number, number, number, number, number, number],
   descricoes: [string, string, string, string, string],
   contrapartes: [string, string, string, string, string],
 ) {
@@ -361,10 +362,38 @@ function distribuirPerfilFinanceiro(
     insumos: despesas * pesosDespesa[1],
     folha: despesas * pesosDespesa[2],
     aluguel: despesas * pesosDespesa[3],
-    marketing: despesas * pesosDespesa[4],
+    energia: despesas * pesosDespesa[4],
+    marketing: despesas * pesosDespesa[5],
     descricoes,
     contrapartes,
   };
+}
+
+/** Movimentos menores tornam ticket, ritmo diário e drill-downs verossímeis. */
+function lancamentosDistribuidos(
+  empresaId: string,
+  competencia: string,
+  chave: string,
+  dias: number[],
+  tipo: "entrada" | "saida",
+  total: number,
+  descricao: string,
+  contraparte: string,
+  planoContaId: string | null,
+) {
+  const pesos = [0.08, 0.11, 0.09, 0.14, 0.1, 0.12, 0.13, 0.1, 0.13];
+  const base = new Date(`${competencia}T12:00:00`);
+  return dias.map((dia, index) => lancamento(
+    empresaId,
+    competencia,
+    index === 0 ? chave : `${chave}-${index + 1}`,
+    iso(new Date(base.getFullYear(), base.getMonth(), dia)),
+    tipo,
+    total * pesos[index],
+    `${descricao} — ${index === 0 ? "recebimento inicial" : `movimento ${index + 1}`}`,
+    contraparte,
+    planoContaId,
+  ));
 }
 
 function lancamento(
@@ -455,17 +484,23 @@ function titulo(
   };
 }
 
-async function garantirOrcamento(empresaId: string, contas: { id: string; codigo: string; tipo: string }[], offset: number) {
+async function garantirOrcamento(empresa: EmpresaSeed, contas: { id: string; codigo: string; tipo: string }[]) {
+  const empresaId = empresa.id;
   const registros = competencias.flatMap((competencia, index) =>
     contas.map((conta) => {
-      const sinal = conta.tipo === "receita" ? 1 : -1;
-      const valorBase = conta.tipo === "receita" ? 25000 : 4500;
+      const perfil = perfilFinanceiro(empresa, new Date(`${competencia}T12:00:00`), index);
+      const realizadoPorCodigo: Record<string, number> = {
+        "3.1.01": perfil.vendas, "3.1.02": perfil.servicos, "4.1.01": -perfil.impostos,
+        "4.2.01": -perfil.insumos, "5.1.01": -perfil.folha, "5.2.01": -perfil.aluguel,
+        "5.2.02": -perfil.energia, "5.3.01": -perfil.marketing,
+      };
+      const ajuste = 0.96 + ((index % 4) * 0.025);
       return {
         id: uuid(`orcamento:${empresaId}:${competencia}:${conta.id}`),
         empresa_id: empresaId,
         plano_conta_id: conta.id,
         competencia,
-        valor_previsto: Math.round((valorBase * (1 + offset * 0.05 + index * 0.02) * sinal) * 100) / 100,
+        valor_previsto: Math.round(((realizadoPorCodigo[conta.codigo] ?? 0) * ajuste) * 100) / 100,
       };
     }),
   );
@@ -477,8 +512,9 @@ async function garantirOrcamento(empresaId: string, contas: { id: string; codigo
   if (error) throw error;
 }
 
-async function garantirIndicadores(empresaId: string, offset: number) {
-  const indicadores = [
+async function garantirIndicadores(empresa: EmpresaSeed) {
+  const empresaId = empresa.id;
+  const personalizados = [
     indicador(empresaId, "margem_liquida", "Margem liquida", "Percentual de resultado sobre receita", "percentual", "maior_melhor"),
     indicador(empresaId, "ticket_medio", "Ticket medio", "Valor medio por venda", "moeda", "maior_melhor"),
     indicador(empresaId, "prazo_recebimento", "Prazo medio de recebimento", "Dias entre venda e recebimento", "dias", "menor_melhor"),
@@ -486,23 +522,36 @@ async function garantirIndicadores(empresaId: string, offset: number) {
 
   const { error } = await supabase
     .from("indicadores")
-    .upsert(indicadores, { onConflict: "empresa_id,codigo" });
+    .upsert(personalizados, { onConflict: "empresa_id,codigo" });
 
   if (error) throw error;
 
-  const valores = indicadores.flatMap((indicador, indicadorIndex) =>
-    competencias.map((competencia, index) => ({
-      id: uuid(`indicador-valor:${empresaId}:${indicador.codigo}:${competencia}`),
-      indicador_id: indicador.id,
-      empresa_id: empresaId,
-      competencia,
-      valor: indicador.codigo === "prazo_recebimento"
-        ? 34 - index - offset
-        : indicador.codigo === "ticket_medio"
-          ? 180 + index * 8 + offset * 12
-          : 8 + index * 1.2 + indicadorIndex + offset,
-      meta: indicador.codigo === "prazo_recebimento" ? 28 : indicador.codigo === "ticket_medio" ? 220 : 15,
-    })),
+  const segmentos = empresa.segmento === "geral" ? ["geral"] : ["geral", empresa.segmento];
+  const { data: templates, error: templatesError } = await supabase
+    .from("indicadores")
+    .select("id, codigo")
+    .is("empresa_id", null)
+    .in("segmento", segmentos)
+    .eq("ativo", true);
+  if (templatesError) throw templatesError;
+
+  const porCodigo = new Map((templates ?? []).map((item) => [item.codigo, item]));
+  for (const personalizado of personalizados) {
+    porCodigo.set(personalizado.codigo, personalizado);
+  }
+
+  const valores = [...porCodigo.values()].flatMap((indicadorAtual) =>
+    competencias.map((competencia, index) => {
+      const demonstrativo = valorIndicadorDemo(empresa, indicadorAtual.codigo, competencia, index);
+      return {
+        id: uuid(`indicador-valor:${empresaId}:${indicadorAtual.codigo}:${competencia}`),
+        indicador_id: indicadorAtual.id,
+        empresa_id: empresaId,
+        competencia,
+        valor: Math.round(demonstrativo.valor * 100) / 100,
+        meta: demonstrativo.meta,
+      };
+    }),
   );
 
   const { error: valoresError } = await supabase
@@ -510,6 +559,61 @@ async function garantirIndicadores(empresaId: string, offset: number) {
     .upsert(valores, { onConflict: "indicador_id,empresa_id,competencia" });
 
   if (valoresError) throw valoresError;
+}
+
+function valorIndicadorDemo(empresa: EmpresaSeed, codigo: string, competencia: string, index: number) {
+  const perfil = tipoPerfil(empresa);
+  const progresso = index / Math.max(1, competencias.length - 1);
+
+  if (perfil === "essencial") {
+    const data = new Date(`${competencia}T12:00:00`);
+    const pressao = pressaoFinanceiraEssencial(data);
+    return interpolarIndicador(codigo, pressao, {
+      margem_lucro: [18, -35, 12], margem_liquida: [16, -40, 10], capital_giro: [42000, -18000, 30000],
+      liquidez_corrente: [1.9, 0.62, 1.5], endividamento: [28, 78, 45], folha_faturamento: [22, 44, 30],
+      ponto_equilibrio: [42000, 65000, 45000], prazo_recebimento: [22, 52, 30], inadimplencia: [2, 26, 5],
+      giro_estoque: [7.5, 2.3, 6], ticket_medio: [240, 175, 230], margem_produto: [42, 18, 35],
+      cobertura_estoque: [45, 18, 35],
+    });
+  }
+
+  if (perfil === "profissional") {
+    return interpolarIndicador(codigo, progresso, {
+      margem_lucro: [14, 21, 18], margem_liquida: [12, 19, 16], capital_giro: [55000, 78000, 70000],
+      liquidez_corrente: [1.5, 2.1, 1.8], endividamento: [45, 34, 38], folha_faturamento: [32, 27, 30],
+      ponto_equilibrio: [51000, 47000, 48000], prazo_recebimento: [36, 27, 30], inadimplencia: [8, 4, 5],
+      taxa_ocupacao: [62, 76, 72], diaria_media: [320, 385, 360], revpar: [198, 293, 260],
+      cmv_hotelaria: [34, 27, 30], trevpar: [410, 545, 500], ticket_medio: [350, 430, 400],
+    });
+  }
+
+  const sazonalidade = [0, 0.04, -0.02, 0.03, 0.06, 0.08, 0.12, 0.14, 0.09, 0.07, 0.1, 0.15][index] ?? 0;
+  return interpolarIndicador(codigo, Math.min(1, progresso + sazonalidade), {
+    margem_lucro: [23, 31, 28], margem_liquida: [21, 29, 26], capital_giro: [140000, 230000, 200000],
+    liquidez_corrente: [2.1, 2.8, 2.5], endividamento: [38, 29, 32], folha_faturamento: [29, 24, 26],
+    ponto_equilibrio: [105000, 98000, 100000], prazo_recebimento: [31, 23, 25], inadimplencia: [5, 2, 3],
+    taxa_ocupacao: [68, 84, 80], diaria_media: [470, 620, 580], revpar: [319, 520, 470],
+    cmv_hotelaria: [31, 24, 26], trevpar: [590, 810, 750], ticket_medio: [520, 690, 640],
+  });
+}
+
+function pressaoFinanceiraEssencial(competencia: Date) {
+  if (competencia.getFullYear() < hoje.getFullYear()) return 0.08;
+  const mes = competencia.getMonth();
+  if (mes <= 1) return 0;
+  return Math.min(1, 0.15 + (mes - 2) * 0.17);
+}
+
+function interpolarIndicador(
+  codigo: string,
+  progresso: number,
+  configuracao: Record<string, [inicio: number, fim: number, meta: number]>,
+) {
+  const valores = configuracao[codigo] ?? [50, 50, 50];
+  return {
+    valor: valores[0] + (valores[1] - valores[0]) * progresso,
+    meta: valores[2],
+  };
 }
 
 function indicador(
