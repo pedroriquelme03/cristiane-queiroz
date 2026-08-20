@@ -108,7 +108,7 @@ export async function updateSession(request: NextRequest) {
 
   if (usuarioId && pathname === "/login") {
     const url = request.nextUrl.clone();
-    url.pathname = "/";
+    url.pathname = "/inicio";
     url.search = "";
     return redirecionarPreservandoCookies(url, response);
   }

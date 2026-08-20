@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { parseData } from "@/lib/importacao/parsers";
 import { getSessao } from "@/lib/sessao";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import type { RegimeTributario, Segmento } from "@/lib/types";
@@ -25,6 +26,7 @@ async function validarPodeEditarEmpresa(empresaId: string) {
 function revalidarEmpresa(empresaId: string) {
   revalidatePath("/empresa");
   revalidatePath("/empresa/estrutura");
+  revalidatePath("/inicio");
   revalidatePath(`/admin/empresas/${empresaId}`);
   revalidatePath(`/admin/empresas/${empresaId}/estrutura`);
 }
@@ -65,7 +67,11 @@ export async function salvarCadastroEmpresa(empresaId: string, formData: FormDat
   const cnpj = String(formData.get("cnpj") ?? "").replace(/\D/g, "");
   const segmento = String(formData.get("segmento") ?? "geral") as Segmento;
   const regimeTributario = String(formData.get("regime_tributario") ?? "simples") as RegimeTributario;
-  const dataAbertura = String(formData.get("data_abertura") ?? "").trim() || null;
+  const dataAberturaBruta = String(formData.get("data_abertura") ?? "").trim();
+  const dataAbertura = dataAberturaBruta ? parseData(dataAberturaBruta) : null;
+  if (dataAberturaBruta && !dataAbertura) {
+    throw new Error("Informe a data de abertura no formato dd/mm/aaaa.");
+  }
   const qtdFuncionariosInformada = Number(formData.get("qtd_funcionarios") ?? 0);
 
   if (!razaoSocial || !nomeFantasia) throw new Error("Informe razão social e nome fantasia.");
@@ -221,5 +227,39 @@ export async function removerCargo(empresaId: string, cargoId: string) {
     .eq("id", cargoId)
     .eq("empresa_id", empresaId);
   if (error) throw new Error("Não foi possível remover o cargo.");
+  revalidarEmpresa(empresaId);
+}
+
+export async function adicionarColaborador(empresaId: string, formData: FormData) {
+  await validarPodeEditarEmpresa(empresaId);
+  const nome = String(formData.get("nome") ?? "").trim();
+  const nascimentoBruto = String(formData.get("data_nascimento") ?? "").trim();
+  const dataNascimento = parseData(nascimentoBruto);
+  if (!nome) throw new Error("Informe o nome do colaborador.");
+  if (!dataNascimento) throw new Error("Informe a data de nascimento no formato dd/mm/aaaa.");
+
+  const { error } = await supabaseAdmin.from("colaboradores").insert({
+    empresa_id: empresaId,
+    nome,
+    data_nascimento: dataNascimento,
+    ativo: true,
+  });
+  if (error) {
+    if (/colaboradores/i.test(error.message)) {
+      throw new Error("Falta aplicar a migration 0016_colaboradores.sql no Supabase.");
+    }
+    throw new Error("Não foi possível cadastrar o colaborador.");
+  }
+  revalidarEmpresa(empresaId);
+}
+
+export async function removerColaborador(empresaId: string, colaboradorId: string) {
+  await validarPodeEditarEmpresa(empresaId);
+  const { error } = await supabaseAdmin
+    .from("colaboradores")
+    .delete()
+    .eq("id", colaboradorId)
+    .eq("empresa_id", empresaId);
+  if (error) throw new Error("Não foi possível remover o colaborador.");
   revalidarEmpresa(empresaId);
 }

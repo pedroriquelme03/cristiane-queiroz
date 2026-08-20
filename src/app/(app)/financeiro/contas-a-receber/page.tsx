@@ -1,8 +1,9 @@
 import { DialogoTitulo } from "@/components/financeiro/dialogo-titulo";
+import { TabelaContasFixas } from "@/components/financeiro/tabela-contas-fixas";
 import { TabelaTitulos } from "@/components/financeiro/tabela-titulos";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Kpi } from "@/components/ui/kpi";
-import { getPlanoContas, getTitulos, statusEfetivo } from "@/lib/dados";
+import { agruparContasFixas, getPlanoContas, getTitulos, statusEfetivo } from "@/lib/dados";
 import { moeda, percentual } from "@/lib/format";
 import { getSessao } from "@/lib/sessao";
 
@@ -20,24 +21,29 @@ export default async function ContasAReceberPage({
     getPlanoContas(empresaIdAtiva),
   ]);
 
-  const abertos = titulos.filter((t) => ["aberto", "parcial"].includes(statusEfetivo(t)));
-  const vencidos = titulos.filter((t) => statusEfetivo(t) === "vencido");
+  const abertos = titulos.filter(
+    (t) => !t.fixa && ["aberto", "parcial"].includes(statusEfetivo(t)),
+  );
+  const vencidos = titulos.filter((t) => !t.fixa && statusEfetivo(t) === "vencido");
   const recebidos = titulos.filter((t) => t.status === "pago");
+  const fixos = agruparContasFixas(
+    titulos.filter((t) => t.fixa && ["aberto", "parcial", "vencido"].includes(statusEfetivo(t))),
+  );
 
   const soma = (lista: typeof titulos) =>
     lista.reduce((s, t) => s + t.valor - t.valorPago, 0);
+  const somaFixos = fixos.reduce((s, g) => s + g.saldo, 0);
 
-  const totalAberto = soma(abertos) + soma(vencidos);
+  const totalAberto = soma(abertos) + soma(vencidos) + somaFixos;
   const taxaInadimplencia = totalAberto > 0 ? (soma(vencidos) / totalAberto) * 100 : 0;
 
   // Concentração por cliente: quanto do total em aberto está no maior devedor
-  const porCliente = [...abertos, ...vencidos].reduce<Record<string, number>>(
-    (acc, t) => {
-      acc[t.contraparte] = (acc[t.contraparte] ?? 0) + t.valor - t.valorPago;
-      return acc;
-    },
-    {},
-  );
+  const porCliente = [...abertos, ...vencidos, ...fixos.flatMap((g) => g.parcelas.filter((t) => ["aberto", "parcial", "vencido"].includes(statusEfetivo(t))))].reduce<
+    Record<string, number>
+  >((acc, t) => {
+    acc[t.contraparte] = (acc[t.contraparte] ?? 0) + t.valor - t.valorPago;
+    return acc;
+  }, {});
   const ranking = Object.entries(porCliente).sort((a, b) => b[1] - a[1]);
 
   return (
@@ -51,17 +57,39 @@ export default async function ContasAReceberPage({
           nota={`${vencidos.length} títulos`}
         />
         <Kpi
+          rotulo="Recebimentos fixos"
+          valor={moeda(somaFixos)}
+          nota={`${fixos.length} contrato${fixos.length === 1 ? "" : "s"}`}
+        />
+        <Kpi
           rotulo="Inadimplência"
           valor={percentual(taxaInadimplencia)}
           tom={taxaInadimplencia > 5 ? "atencao" : "positivo"}
           nota="Meta: abaixo de 5%"
         />
-        <Kpi
-          rotulo="Recebido no histórico"
-          valor={moeda(recebidos.reduce((s, t) => s + t.valor, 0))}
-          nota={`${recebidos.length} títulos liquidados`}
-        />
       </div>
+
+      <Card>
+        <CardHeader
+          titulo="Recebimentos fixos"
+          descricao="Uma linha por cadastro — parcelas mensais agrupadas com meses restantes a receber."
+          acao={
+            podeEditar ? (
+              <DialogoTitulo tipo="receber" contas={contas} empresaId={empresaIdAtiva} fixaPadrao />
+            ) : null
+          }
+        />
+        <CardBody className="px-0 py-0">
+          <TabelaContasFixas
+            grupos={fixos}
+            tipo="receber"
+            rotuloContraparte="Cliente"
+            contas={contas}
+            empresaId={empresaIdAtiva}
+            podeEditar={podeEditar}
+          />
+        </CardBody>
+      </Card>
 
       {vencidos.length > 0 ? (
         <Card>

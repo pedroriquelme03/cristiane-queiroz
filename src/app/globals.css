@@ -131,3 +131,80 @@ body {
     transition: none;
   }
 }
+
+/* Organograma (src/app/(app)/empresa/organograma). Arvore com conectores em
+   CSS puro, apoiada nos pseudo-elementos das <li> — sem dependencia externa. */
+.organograma ul {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  padding-top: 22px;
+  list-style: none;
+}
+
+.organograma > ul {
+  padding-top: 0;
+}
+
+.organograma li {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 22px 12px 0;
+}
+
+/* Barramento horizontal + queda vertical que ligam os irmaos ao pai. */
+.organograma li::before,
+.organograma li::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 50%;
+  width: 50%;
+  height: 22px;
+  border-top: 1px solid var(--border);
+}
+
+.organograma li::after {
+  right: auto;
+  left: 50%;
+  border-left: 1px solid var(--border);
+}
+
+/* Filho unico: so a queda vertical, sem barramento. */
+.organograma li:only-child::before,
+.organograma li:only-child::after {
+  display: none;
+}
+
+/* Apara as pontas do barramento nas extremidades da linha de irmaos. */
+.organograma li:first-child::before,
+.organograma li:last-child::after {
+  border: 0 none;
+}
+
+.organograma li:last-child::before {
+  border-right: 1px solid var(--border);
+  border-radius: 0 6px 0 0;
+}
+
+.organograma li:first-child::after {
+  border-radius: 6px 0 0 0;
+}
+
+/* Queda vertical do pai ate o barramento dos filhos. */
+.organograma ul ul::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 0;
+  height: 22px;
+  border-left: 1px solid var(--border);
+}
+
+/* Raiz e node folha nao herdam o padding de conexao superior. */
+.organograma > ul > li {
+  padding-top: 0;
+}

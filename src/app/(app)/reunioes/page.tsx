@@ -8,18 +8,13 @@ import { CabecalhoPagina } from "@/components/ui/cabecalho-pagina";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Kpi } from "@/components/ui/kpi";
 import { nivelDoPlano } from "@/lib/acesso-planos";
+import { dataHora } from "@/lib/format";
 import { getReunioes } from "@/lib/dados";
 import { getSessao } from "@/lib/sessao";
 import { createClient } from "@/lib/supabase/server";
 
 function formatarDataHora(iso: string) {
-  return new Date(iso).toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return dataHora(iso);
 }
 
 export default async function ReunioesPage({

@@ -12,6 +12,7 @@ import {
 } from "@/app/(app)/admin/acoes";
 import { BadgeStatusAssinatura, BadgeStatusFatura } from "@/components/assinatura/badge-status";
 import { CampoSelect, CampoTexto } from "@/components/ui/campo";
+import { CampoData } from "@/components/ui/campo-data";
 import { Modal } from "@/components/ui/modal";
 import { moeda, data as formatarData } from "@/lib/format";
 import { precoNoCiclo } from "@/lib/assinatura";
@@ -132,12 +133,13 @@ function FaturaComPagamento({ fatura }: { fatura: Fatura }) {
               defaultValue={estado.valores?.valorPago ?? fatura.valor.toString()}
               erro={estado.campos?.valorPago}
             />
-            <CampoTexto
+            <CampoData
               id="pagoEm"
+              name="pagoEm"
               rotulo="Data"
-              tipo="date"
               defaultValue={estado.valores?.pagoEm ?? hoje}
               erro={estado.campos?.pagoEm}
+              required
             />
           </div>
           <CampoSelect

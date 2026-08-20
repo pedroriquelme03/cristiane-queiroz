@@ -4,7 +4,7 @@
  */
 import { z } from "zod";
 
-import { parseValor } from "@/lib/importacao/parsers";
+import { parseData, parseValor } from "@/lib/importacao/parsers";
 
 const valorMonetario = (rotulo: string) =>
   z
@@ -96,7 +96,14 @@ export const esquemaPagamento = z.object({
     .string()
     .trim()
     .min(1, "Informe a data do pagamento")
-    .regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida"),
+    .transform((valor, ctx) => {
+      const iso = parseData(valor);
+      if (!iso) {
+        ctx.addIssue({ code: "custom", message: "Use o formato dd/mm/aaaa" });
+        return z.NEVER;
+      }
+      return iso;
+    }),
   observacao: z.string().trim().max(200).optional(),
 });
 

@@ -10,6 +10,7 @@ import {
   type EstadoFormulario,
 } from "@/app/(app)/financeiro/acoes";
 import { CampoSelect, CampoTexto } from "@/components/ui/campo";
+import { CampoData } from "@/components/ui/campo-data";
 import { Modal } from "@/components/ui/modal";
 import type { Lancamento, PlanoConta } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -63,12 +64,11 @@ export function DialogoLancamento({
           {lancamento ? <input type="hidden" name="id" value={lancamento.id} /> : null}
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <CampoTexto
+            <CampoData
               id={`data-${sufixo}`}
               name="data"
               rotulo="Data"
-              tipo="date"
-              defaultValue={valor("data", lancamento?.data ?? hoje)}
+              defaultValue={String(valor("data", lancamento?.data ?? hoje) || "")}
               required
               erro={estado.campos?.data}
             />

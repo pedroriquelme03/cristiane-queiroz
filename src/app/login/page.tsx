@@ -22,7 +22,7 @@ export default async function LoginPage({
 
         <div className="rounded-xl border border-border bg-surface px-6 py-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
           <FormularioLogin
-            redirecionarPara={redirect ?? "/"}
+            redirecionarPara={redirect ?? "/inicio"}
             desabilitado={!supabaseConfigurado}
           />
         </div>
@@ -42,7 +42,17 @@ export default async function LoginPage({
         ) : null}
 
         <p className="mt-6 text-center text-xs text-muted-foreground">
-          Problemas para acessar? Fale com a equipe da consultoria.
+          Problemas para acessar?{" "}
+          <a
+            href={`https://wa.me/5545999316874?text=${encodeURIComponent(
+              "Olá Equipe Cristiane Queiroz, preciso de ajuda para logar no sistema de controle financeiro",
+            )}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-brand hover:underline"
+          >
+            Fale com a equipe da consultoria.
+          </a>
         </p>
       </div>
     </div>

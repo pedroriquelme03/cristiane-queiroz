@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { parseValor } from "@/lib/importacao/parsers";
+import { parseData, parseValor } from "@/lib/importacao/parsers";
 import { getSessao, type Sessao } from "@/lib/sessao";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { supabaseConfigurado } from "@/lib/supabase/config";
@@ -167,6 +167,7 @@ export async function salvarTitulo(
   }
 
   const status = statusDoTitulo(analise.data.valor, valorPago);
+  const fixa = analise.data.fixa;
   const registro = {
     tipo,
     contraparte: analise.data.contraparte,
@@ -176,24 +177,59 @@ export async function salvarTitulo(
     valor: analise.data.valor,
     plano_conta_id: analise.data.planoContaId ?? null,
     status,
+    fixa,
   };
 
   if (id) {
     const { error } = await supabaseAdmin.from("titulos").update(registro).eq("id", id);
     if (error) return { erro: "Não foi possível atualizar o título.", valores };
   } else {
-    const { error } = await supabaseAdmin.from("titulos").insert({
-      ...registro,
-      empresa_id: empresaId,
-      valor_pago: 0,
-      origem: "manual",
-      created_by: sessao.usuarioId,
+    const meses = fixa ? analise.data.mesesRecorrencia : 1;
+    const grupoFixaId = fixa ? crypto.randomUUID() : null;
+    const registros = Array.from({ length: meses }, (_, indice) => {
+      const vencimento = adicionarMeses(analise.data.vencimento, indice);
+      const emissao = analise.data.emissao
+        ? adicionarMeses(analise.data.emissao, indice)
+        : null;
+      return {
+        ...registro,
+        vencimento,
+        emissao,
+        empresa_id: empresaId,
+        valor_pago: 0,
+        status: "aberto" as const,
+        origem: "manual" as const,
+        created_by: sessao.usuarioId,
+        ...(grupoFixaId ? { grupo_fixa_id: grupoFixaId } : {}),
+      };
     });
-    if (error) return { erro: "Não foi possível salvar o título.", valores };
+
+    const { error } = await supabaseAdmin.from("titulos").insert(registros);
+    if (error) {
+      // Coluna `fixa` / `grupo_fixa_id` pode ainda não existir se a migration não foi aplicada.
+      if (String(error.message).toLowerCase().includes("fixa")) {
+        return {
+          erro:
+            "Falta aplicar as migrations 0014_titulos_fixa.sql e 0015_titulos_grupo_fixa.sql no Supabase para usar contas fixas.",
+          valores,
+        };
+      }
+      return { erro: "Não foi possível salvar o título.", valores };
+    }
   }
 
   revalidarFinanceiro();
   return { ok: true };
+}
+
+/** Soma meses preservando o dia; se o mês não tiver o dia, usa o último dia válido. */
+function adicionarMeses(iso: string, meses: number) {
+  const [ano, mes, dia] = iso.split("-").map(Number);
+  const base = new Date(Date.UTC(ano, mes - 1 + meses, 1));
+  const ultimoDia = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth() + 1, 0)).getUTCDate();
+  const diaFinal = Math.min(dia, ultimoDia);
+  const data = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), diaFinal));
+  return data.toISOString().slice(0, 10);
 }
 
 export async function registrarBaixaTitulo(
@@ -204,11 +240,14 @@ export async function registrarBaixaTitulo(
   const contexto = await contextoFinanceiro(formData);
   if ("erro" in contexto) return { erro: contexto.erro, valores };
   const id = String(formData.get("id") ?? "").trim();
-  const data = String(formData.get("data") ?? "").trim();
+  const dataBruta = String(formData.get("data") ?? "").trim();
+  const data = parseData(dataBruta) ?? "";
   const valor = parseValor(formData.get("valor"));
   const campos: Record<string, string> = {};
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) campos.data = "Informe a data da baixa.";
-  if (data > new Date().toISOString().slice(0, 10)) campos.data = "A baixa não pode ter data futura.";
+  if (!data) campos.data = "Informe a data no formato dd/mm/aaaa.";
+  if (data && data > new Date().toISOString().slice(0, 10)) {
+    campos.data = "A baixa não pode ter data futura.";
+  }
   if (valor === null || valor <= 0) campos.valor = "Informe um valor maior que zero.";
   if (Object.keys(campos).length) return { campos, valores };
 
@@ -280,6 +319,38 @@ export async function excluirTitulo(
 
   const { error } = await supabaseAdmin.from("titulos").delete().eq("id", id);
   if (error) return { erro: "Não foi possível excluir o título." };
+  revalidarFinanceiro();
+  return { ok: true };
+}
+
+/** Exclui todas as parcelas sem baixa do mesmo cadastro de conta fixa. */
+export async function excluirGrupoContaFixa(
+  _anterior: EstadoFormulario,
+  formData: FormData,
+): Promise<EstadoFormulario> {
+  const contexto = await contextoFinanceiro(formData);
+  if ("erro" in contexto) return { erro: contexto.erro };
+  const tituloId = String(formData.get("tituloId") ?? "").trim();
+  const grupoFixaId = String(formData.get("grupoFixaId") ?? "").trim();
+  const titulo = await buscarTituloAutorizado(tituloId, contexto.empresaId, contexto.sessao);
+  if (!titulo) return { erro: "Conta fixa não encontrada." };
+
+  if (grupoFixaId) {
+    const { error } = await supabaseAdmin
+      .from("titulos")
+      .delete()
+      .eq("empresa_id", contexto.empresaId)
+      .eq("grupo_fixa_id", grupoFixaId)
+      .eq("valor_pago", 0);
+    if (error) return { erro: "Não foi possível excluir a conta fixa." };
+  } else {
+    if (Number(titulo.valor_pago) > 0) {
+      return { erro: "Títulos com baixa registrada não podem ser excluídos." };
+    }
+    const { error } = await supabaseAdmin.from("titulos").delete().eq("id", tituloId);
+    if (error) return { erro: "Não foi possível excluir a conta fixa." };
+  }
+
   revalidarFinanceiro();
   return { ok: true };
 }

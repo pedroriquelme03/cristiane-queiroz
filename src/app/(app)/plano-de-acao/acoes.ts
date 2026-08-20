@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { parseValor } from "@/lib/importacao/parsers";
+import { parseData, parseValor } from "@/lib/importacao/parsers";
 import { getSessao, type Sessao } from "@/lib/sessao";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import type { StatusAcao } from "@/lib/types";
@@ -48,7 +48,8 @@ export async function salvarPlanoAcao(
   const acao = String(formData.get("acao") ?? "").trim();
   const area = String(formData.get("area") ?? "");
   const responsavel = String(formData.get("responsavel") ?? "").trim();
-  const prazo = String(formData.get("prazo") ?? "").trim();
+  const prazoBruto = String(formData.get("prazo") ?? "").trim();
+  const prazo = parseData(prazoBruto) ?? "";
   const prioridade = String(formData.get("prioridade") ?? "");
   const status = String(formData.get("status") ?? "nao_iniciado") as StatusAcao;
   const percentual = inteiroEntre(formData.get("percentual"), 0, 100);
@@ -61,10 +62,7 @@ export async function salvarPlanoAcao(
   if (!acao) campos.acao = "Informe a ação proposta.";
   if (!AREAS.includes(area)) campos.area = "Selecione uma área.";
   if (!responsavel) campos.responsavel = "Informe o responsável.";
-  if (
-    !/^\d{4}-\d{2}-\d{2}$/.test(prazo) ||
-    Number.isNaN(new Date(`${prazo}T12:00:00`).getTime())
-  ) campos.prazo = "Informe um prazo válido.";
+  if (!prazo) campos.prazo = "Informe o prazo no formato dd/mm/aaaa.";
   if (!PRIORIDADES.includes(prioridade)) campos.prioridade = "Selecione a prioridade.";
   if (!STATUS.includes(status)) campos.status = "Selecione o status.";
   if (percentual === null) campos.percentual = "Use um número inteiro de 0 a 100.";

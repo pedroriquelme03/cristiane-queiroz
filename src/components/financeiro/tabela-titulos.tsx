@@ -68,7 +68,10 @@ export function TabelaTitulos({
             return (
               <tr key={titulo.id} className="border-b border-border last:border-0">
                 <th scope="row" className="px-5 py-2.5 text-left font-normal">
-                  {titulo.contraparte}
+                  <span className="inline-flex flex-wrap items-center gap-2">
+                    {titulo.contraparte}
+                    {titulo.fixa ? <Badge tom="atencao">Fixa</Badge> : null}
+                  </span>
                 </th>
                 <td className="px-3 py-2.5 text-muted-foreground">
                   {titulo.documento ?? "—"}

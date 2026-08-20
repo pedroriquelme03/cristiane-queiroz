@@ -3,16 +3,21 @@ import { Building2, MapPin, Plus, Trash2, Users, UsersRound } from "lucide-react
 
 import {
   adicionarArea,
+  adicionarColaborador,
   adicionarUnidade,
   atualizarColaboradores,
   removerArea,
   removerCargo,
+  removerColaborador,
   removerUnidade,
 } from "@/app/(app)/empresa/actions";
 import { FormCargo } from "@/components/empresa/form-cargo";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardBody } from "@/components/ui/card";
 import { CampoSelect } from "@/components/ui/campo";
+import { CampoData } from "@/components/ui/campo-data";
+import { data as formatarData } from "@/lib/format";
+import { getColaboradores } from "@/lib/dados";
 import { getSessao } from "@/lib/sessao";
 import { createClient } from "@/lib/supabase/server";
 
@@ -98,8 +103,10 @@ export default async function EstruturaPage({
   const totalCargos = listaCargos.length;
   const totalPosicoes = listaCargos.reduce((soma, cargo) => soma + cargo.quantidade, 0);
   const totalColaboradores = Math.max(empresa.qtd_funcionarios ?? 0, totalPosicoes);
+  const pessoas = await getColaboradores(empresa.id);
 
   return (
+    <div className="space-y-4">
     <div className="grid min-w-0 gap-4 xl:grid-cols-3">
       <PainelEstrutura
         titulo="Colaboradores"
@@ -220,6 +227,79 @@ export default async function EstruturaPage({
           <EstadoVazio icone={<UsersRound className="size-5" />} texto="Nenhuma área ou cargo cadastrado." />
         )}
       </PainelEstrutura>
+    </div>
+
+    <Card>
+      <CardBody className="space-y-4">
+        <header className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-medium text-muted-foreground">Equipe com aniversário</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Cadastre nome e data de nascimento — os aniversariantes do dia aparecem na tela de início.
+            </p>
+          </div>
+          {podeEditar ? (
+            <details>
+              <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-lg bg-brand px-3 py-2 text-xs font-medium text-brand-foreground hover:opacity-90">
+                <Plus className="size-4" aria-hidden />
+                Pessoa
+              </summary>
+              <form
+                action={adicionarColaborador.bind(null, empresa.id)}
+                className="mt-3 grid min-w-[16rem] gap-3 sm:grid-cols-[1fr_auto_auto]"
+              >
+                <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+                  Nome
+                  <input
+                    name="nome"
+                    required
+                    placeholder="Nome completo"
+                    className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                  />
+                </label>
+                <CampoData
+                  id={`nasc-colab-${empresa.id}`}
+                  name="data_nascimento"
+                  rotulo="Nascimento"
+                  required
+                />
+                <button
+                  type="submit"
+                  className="self-end rounded-lg bg-brand px-3 py-2 text-xs font-medium text-brand-foreground hover:opacity-90"
+                >
+                  Adicionar
+                </button>
+              </form>
+            </details>
+          ) : null}
+        </header>
+
+        {pessoas.length ? (
+          <ul className="divide-y divide-border rounded-lg border border-border">
+            {pessoas.map((pessoa) => (
+              <li key={pessoa.id} className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm">
+                <span className="min-w-0 truncate font-medium">{pessoa.nome}</span>
+                <span className="flex shrink-0 items-center gap-3">
+                  <span className="tabular text-muted-foreground">{formatarData(pessoa.dataNascimento)}</span>
+                  {podeEditar ? (
+                    <form action={removerColaborador.bind(null, empresa.id, pessoa.id)}>
+                      <BotaoIcone title="Remover colaborador">
+                        <Trash2 className="size-3.5" aria-hidden />
+                      </BotaoIcone>
+                    </form>
+                  ) : null}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <EstadoVazio
+            icone={<Users className="size-5" />}
+            texto="Nenhuma pessoa cadastrada com data de nascimento."
+          />
+        )}
+      </CardBody>
+    </Card>
     </div>
   );
 }

@@ -1,8 +1,9 @@
 import { DialogoTitulo } from "@/components/financeiro/dialogo-titulo";
+import { TabelaContasFixas } from "@/components/financeiro/tabela-contas-fixas";
 import { TabelaTitulos } from "@/components/financeiro/tabela-titulos";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Kpi } from "@/components/ui/kpi";
-import { getPlanoContas, getTitulos, statusEfetivo } from "@/lib/dados";
+import { agruparContasFixas, getPlanoContas, getTitulos, statusEfetivo } from "@/lib/dados";
 import { diasAte, moeda } from "@/lib/format";
 import { getSessao } from "@/lib/sessao";
 
@@ -20,12 +21,18 @@ export default async function ContasAPagarPage({
     getPlanoContas(empresaIdAtiva),
   ]);
 
-  const abertos = titulos.filter((t) => ["aberto", "parcial"].includes(statusEfetivo(t)));
-  const vencidos = titulos.filter((t) => statusEfetivo(t) === "vencido");
+  const abertos = titulos.filter(
+    (t) => !t.fixa && ["aberto", "parcial"].includes(statusEfetivo(t)),
+  );
+  const vencidos = titulos.filter((t) => !t.fixa && statusEfetivo(t) === "vencido");
   const pagos = titulos.filter((t) => t.status === "pago");
+  const fixas = agruparContasFixas(
+    titulos.filter((t) => t.fixa && ["aberto", "parcial", "vencido"].includes(statusEfetivo(t))),
+  );
 
   const soma = (lista: typeof titulos) =>
     lista.reduce((s, t) => s + t.valor - t.valorPago, 0);
+  const somaFixas = fixas.reduce((s, g) => s + g.saldo, 0);
 
   // Concentração de vencimentos: quanto vence nos próximos 7 dias
   const emSete = abertos.filter((t) => diasAte(t.vencimento) <= 7);
@@ -33,7 +40,7 @@ export default async function ContasAPagarPage({
   return (
     <>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Kpi rotulo="Total em aberto" valor={moeda(soma(abertos) + soma(vencidos))} />
+        <Kpi rotulo="Total em aberto" valor={moeda(soma(abertos) + soma(vencidos) + somaFixas)} />
         <Kpi
           rotulo="Vencidos"
           valor={moeda(soma(vencidos))}
@@ -47,11 +54,33 @@ export default async function ContasAPagarPage({
           nota={`${emSete.length} títulos`}
         />
         <Kpi
-          rotulo="Pagos no histórico"
-          valor={moeda(pagos.reduce((s, t) => s + t.valor, 0))}
-          nota={`${pagos.length} títulos quitados`}
+          rotulo="Contas fixas em aberto"
+          valor={moeda(somaFixas)}
+          nota={`${fixas.length} conta${fixas.length === 1 ? "" : "s"}`}
         />
       </div>
+
+      <Card>
+        <CardHeader
+          titulo="Contas fixas"
+          descricao="Uma linha por cadastro — parcelas mensais agrupadas com meses restantes a pagar."
+          acao={
+            podeEditar ? (
+              <DialogoTitulo tipo="pagar" contas={contas} empresaId={empresaIdAtiva} fixaPadrao />
+            ) : null
+          }
+        />
+        <CardBody className="px-0 py-0">
+          <TabelaContasFixas
+            grupos={fixas}
+            tipo="pagar"
+            rotuloContraparte="Fornecedor"
+            contas={contas}
+            empresaId={empresaIdAtiva}
+            podeEditar={podeEditar}
+          />
+        </CardBody>
+      </Card>
 
       {vencidos.length > 0 ? (
         <Card>

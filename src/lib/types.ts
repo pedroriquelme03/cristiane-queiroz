@@ -57,6 +57,13 @@ export interface Unidade {
   uf: string;
 }
 
+export interface Colaborador {
+  id: string;
+  nome: string;
+  dataNascimento: string;
+  ativo: boolean;
+}
+
 export interface PlanoConta {
   id: string;
   codigo: string;
@@ -92,6 +99,10 @@ export interface Titulo {
   status: StatusTitulo;
   planoContaId: string | null;
   origem: "manual" | "importacao" | "integracao";
+  /** Conta recorrente mensal (aluguel, energia, etc.). */
+  fixa: boolean;
+  /** Agrupa as parcelas geradas no mesmo cadastro de conta fixa. */
+  grupoFixaId: string | null;
 }
 
 export interface Orcamento {

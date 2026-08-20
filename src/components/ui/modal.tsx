@@ -45,11 +45,13 @@ export function Modal({
         if (e.target === ref.current) onFechar();
       }}
       className={cn(
-        "m-auto max-h-[90dvh] w-full max-w-lg overflow-hidden rounded-xl border border-border bg-surface p-0 text-foreground backdrop:bg-black/50",
+        // overflow-visible: o CampoSelect porta o menu para dentro do dialog;
+        // overflow-hidden cortaria as opções fora da caixa do modal.
+        "m-auto max-h-[90dvh] w-full max-w-lg overflow-visible rounded-xl border border-border bg-surface p-0 text-foreground backdrop:bg-black/50",
         className,
       )}
     >
-      <header className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
+      <header className="flex items-start justify-between gap-4 rounded-t-xl border-b border-border px-5 py-4">
         <div>
           <h2 id="titulo-modal" className="text-sm font-semibold tracking-tight">
             {titulo}
@@ -67,7 +69,7 @@ export function Modal({
           <X className="size-4" aria-hidden />
         </button>
       </header>
-      <div className="max-h-[calc(90dvh-73px)] overflow-y-auto px-5 py-4">{children}</div>
+      <div className="max-h-[calc(90dvh-73px)] overflow-y-auto rounded-b-xl px-5 py-4">{children}</div>
     </dialog>
   );
 }

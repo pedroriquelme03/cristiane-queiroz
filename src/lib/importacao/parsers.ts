@@ -88,7 +88,7 @@ export function parseValor(bruto: unknown): number | null {
     texto = texto.slice(0, sufixo.index).trim();
   }
 
-  texto = texto.replace(/R\$|\s/gi, "");
+  texto = texto.replace(/R\$|US\$|€|\$|\s/gi, "");
   if (texto.startsWith("-")) {
     negativo = true;
     texto = texto.slice(1);

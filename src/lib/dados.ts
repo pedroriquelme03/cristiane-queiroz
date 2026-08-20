@@ -10,6 +10,7 @@ import { getSessao } from "@/lib/sessao";
 import type {
   Alerta,
   AvaliacaoMaturidade,
+  Colaborador,
   DashboardKpis,
   Diagnostico,
   Documento,
@@ -23,9 +24,17 @@ import type {
   PontoFluxo,
   PontoProjecao,
   Reuniao,
-  StatusTitulo,
   Titulo,
 } from "@/lib/types";
+
+// Lógica pura de títulos vive em @/lib/titulos (sem Supabase), para poder ser
+// usada em Client Components. Reexportada aqui pela compatibilidade com o código
+// que já importa esses símbolos de @/lib/dados.
+export {
+  statusEfetivo,
+  agruparContasFixas,
+  type ContaFixaAgrupada,
+} from "@/lib/titulos";
 
 const hoje = () => new Date().toISOString().slice(0, 10);
 
@@ -38,12 +47,6 @@ function intervaloDoMes(competencia: string) {
 }
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
-
-/** Espelha status_efetivo da view titulos_view: "vencido" e derivado. */
-export function statusEfetivo(titulo: Titulo): StatusTitulo | "vencido" {
-  if (titulo.status === "pago" || titulo.status === "cancelado") return titulo.status;
-  return titulo.vencimento < hoje() ? "vencido" : titulo.status;
-}
 
 // ---------------------------------------------------------------------------
 // Empresa e cadastros
@@ -62,6 +65,92 @@ export async function getEmpresa(_empresaId?: string): Promise<Empresa> {
 
   if (error || !data) throw new Error("Nao foi possivel carregar a empresa.");
   return mapEmpresa(data);
+}
+
+/** Cidade/UF da unidade matriz (ou da primeira unidade cadastrada). */
+export async function getCidadeEmpresa(
+  empresaIdParam?: string,
+): Promise<{ cidade: string; uf: string } | null> {
+  const empresaId = await resolverEmpresaId(empresaIdParam);
+  if (!empresaId) return null;
+
+  const supabase = await criarSupabaseObrigatorio();
+  const { data, error } = await supabase
+    .from("unidades")
+    .select("cidade, uf, tipo")
+    .eq("empresa_id", empresaId)
+    .order("tipo");
+
+  if (error || !data?.length) return null;
+  const matriz = data.find((u) => u.tipo === "matriz") ?? data[0];
+  const cidade = String(matriz.cidade ?? "").trim();
+  const uf = String(matriz.uf ?? "").trim();
+  if (!cidade) return null;
+  return { cidade, uf };
+}
+
+/** Colaboradores ativos que fazem aniversário hoje (fuso America/Sao_Paulo). */
+export async function getAniversariantesHoje(
+  empresaIdParam?: string,
+): Promise<Colaborador[]> {
+  const empresaId = await resolverEmpresaId(empresaIdParam);
+  if (!empresaId) return [];
+
+  const supabase = await criarSupabaseObrigatorio();
+  const { data, error } = await supabase
+    .from("colaboradores")
+    .select("id, nome, data_nascimento, ativo")
+    .eq("empresa_id", empresaId)
+    .eq("ativo", true);
+
+  if (error) {
+    if (/colaboradores/i.test(error.message)) return [];
+    throw new Error("Nao foi possivel carregar colaboradores.");
+  }
+
+  const hojeBr = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+  }).format(new Date());
+  const [, mesHoje, diaHoje] = hojeBr.split("-");
+
+  return (data ?? [])
+    .filter((row) => {
+      const iso = String(row.data_nascimento ?? "").slice(0, 10);
+      const partes = iso.split("-");
+      return partes[1] === mesHoje && partes[2] === diaHoje;
+    })
+    .map((row) => ({
+      id: row.id,
+      nome: row.nome,
+      dataNascimento: String(row.data_nascimento).slice(0, 10),
+      ativo: Boolean(row.ativo),
+    }))
+    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+}
+
+export async function getColaboradores(empresaIdParam?: string): Promise<Colaborador[]> {
+  const empresaId = await resolverEmpresaId(empresaIdParam);
+  if (!empresaId) return [];
+
+  const supabase = await criarSupabaseObrigatorio();
+  const { data, error } = await supabase
+    .from("colaboradores")
+    .select("id, nome, data_nascimento, ativo")
+    .eq("empresa_id", empresaId)
+    .eq("ativo", true)
+    .order("nome");
+
+  if (error) {
+    if (/colaboradores/i.test(error.message)) return [];
+    throw new Error("Nao foi possivel carregar colaboradores.");
+  }
+
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    nome: row.nome,
+    dataNascimento: String(row.data_nascimento).slice(0, 10),
+    ativo: Boolean(row.ativo),
+  }));
 }
 
 export async function getPlanoContas(empresaIdParam?: string): Promise<PlanoConta[]> {
@@ -204,12 +293,46 @@ export async function getTitulos(tipo: Titulo["tipo"], empresaIdParam?: string):
   if (!empresaId) return [];
 
   const supabase = await criarSupabaseObrigatorio();
-  const { data, error } = await supabase
+  const selecao =
+    "id, tipo, contraparte, documento, emissao, vencimento, valor, valor_pago, data_pagamento, status, plano_conta_id, origem, fixa, grupo_fixa_id";
+  // `data` pode vir do select completo ou dos fallbacks sem fixa/grupo_fixa_id
+  // (enquanto as migrations 0014/0015 nao foram aplicadas). mapTitulo trata as
+  // colunas ausentes, entao tipamos com fixa/grupo_fixa_id opcionais.
+  type TituloRow = Parameters<typeof mapTitulo>[0];
+  let data: TituloRow[] | null;
+  let error: { message: string } | null;
+  ({ data, error } = await supabase
     .from("titulos")
-    .select("id, tipo, contraparte, documento, emissao, vencimento, valor, valor_pago, data_pagamento, status, plano_conta_id, origem")
+    .select(selecao)
     .eq("empresa_id", empresaId)
     .eq("tipo", tipo)
-    .order("vencimento");
+    .order("vencimento"));
+
+  // Compatível enquanto as migrations 0014/0015 não foram aplicadas.
+  if (error && /grupo_fixa/i.test(error.message)) {
+    const comFixa = await supabase
+      .from("titulos")
+      .select(
+        "id, tipo, contraparte, documento, emissao, vencimento, valor, valor_pago, data_pagamento, status, plano_conta_id, origem, fixa",
+      )
+      .eq("empresa_id", empresaId)
+      .eq("tipo", tipo)
+      .order("vencimento");
+    data = comFixa.data;
+    error = comFixa.error;
+  }
+  if (error && /fixa/i.test(error.message)) {
+    const fallback = await supabase
+      .from("titulos")
+      .select(
+        "id, tipo, contraparte, documento, emissao, vencimento, valor, valor_pago, data_pagamento, status, plano_conta_id, origem",
+      )
+      .eq("empresa_id", empresaId)
+      .eq("tipo", tipo)
+      .order("vencimento");
+    data = fallback.data;
+    error = fallback.error;
+  }
 
   if (error) throw new Error("Nao foi possivel carregar titulos.");
   return (data ?? []).map(mapTitulo);
@@ -545,8 +668,11 @@ function dataIso(valor: string | null) {
 
 function formatarDataHoraAlerta(iso: string) {
   return new Date(iso).toLocaleString("pt-BR", {
-    dateStyle: "short",
-    timeStyle: "short",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
     timeZone: "America/Sao_Paulo",
   });
 }
@@ -648,6 +774,8 @@ function mapTitulo(row: {
   status: Titulo["status"];
   plano_conta_id: string | null;
   origem: Titulo["origem"];
+  fixa?: boolean | null;
+  grupo_fixa_id?: string | null;
 }): Titulo {
   return {
     id: row.id,
@@ -662,6 +790,8 @@ function mapTitulo(row: {
     status: row.status,
     planoContaId: row.plano_conta_id,
     origem: row.origem,
+    fixa: Boolean(row.fixa),
+    grupoFixaId: row.grupo_fixa_id ?? null,
   };
 }
 

@@ -6,7 +6,7 @@
  */
 import { z } from "zod";
 
-import { parseValor } from "@/lib/importacao/parsers";
+import { parseData, parseValor } from "@/lib/importacao/parsers";
 
 /** Aceita o valor digitado em pt-BR ("1.234,56") e devolve number. */
 const valorMonetario = z
@@ -22,36 +22,33 @@ const valorMonetario = z
     return numero;
   });
 
+/** Aceita dd/mm/aaaa ou aaaa-mm-dd e normaliza para ISO. */
 const dataIso = z
   .string()
   .trim()
-  .superRefine((valor, ctx) => {
-    if (!valor) {
-      ctx.addIssue({ code: "custom", message: "Informe a data" });
-      return;
+  .min(1, "Informe a data")
+  .transform((valor, ctx) => {
+    const iso = parseData(valor);
+    if (!iso) {
+      ctx.addIssue({ code: "custom", message: "Use o formato dd/mm/aaaa" });
+      return z.NEVER;
     }
-    const data = new Date(`${valor}T12:00:00Z`);
-    if (
-      !/^\d{4}-\d{2}-\d{2}$/.test(valor) ||
-      Number.isNaN(data.getTime()) ||
-      data.toISOString().slice(0, 10) !== valor
-    ) ctx.addIssue({ code: "custom", message: "Data inválida" });
+    return iso;
   });
 
 const dataIsoOpcional = z
   .string()
   .trim()
   .optional()
-  .transform((valor) => (valor === "" ? undefined : valor))
-  .refine((valor) => {
-    if (!valor) return true;
-    const data = new Date(`${valor}T12:00:00Z`);
-    return (
-      /^\d{4}-\d{2}-\d{2}$/.test(valor) &&
-      !Number.isNaN(data.getTime()) &&
-      data.toISOString().slice(0, 10) === valor
-    );
-  }, "Data inválida");
+  .transform((valor, ctx) => {
+    if (!valor) return undefined;
+    const iso = parseData(valor);
+    if (!iso) {
+      ctx.addIssue({ code: "custom", message: "Use o formato dd/mm/aaaa" });
+      return z.NEVER;
+    }
+    return iso;
+  });
 
 const textoOpcional = z
   .string()
@@ -94,6 +91,19 @@ export const esquemaTitulo = z
       .refine((v) => v >= 0, "O valor pago não pode ser negativo"),
     documento: textoOpcional,
     planoContaId: textoOpcional,
+    fixa: z
+      .union([z.literal("on"), z.literal("true"), z.literal("false"), z.literal(""), z.undefined()])
+      .transform((v) => v === "on" || v === "true"),
+    mesesRecorrencia: z
+      .string()
+      .trim()
+      .optional()
+      .transform((texto) => {
+        if (!texto) return 1;
+        const n = Number(texto);
+        return Number.isFinite(n) ? n : 1;
+      })
+      .pipe(z.number().int().min(1).max(24)),
   })
   .refine((t) => t.valorPago <= t.valor, {
     message: "O valor pago não pode superar o valor do título",

@@ -44,6 +44,7 @@ export function CampoSelect({
   const [aberto, setAberto] = useState(false);
   const [busca, setBusca] = useState("");
   const [posicao, setPosicao] = useState({ top: 0, left: 0, width: 0, maxHeight: 256 });
+  const [portalAlvo, setPortalAlvo] = useState<HTMLElement | null>(null);
   const raizRef = useRef<HTMLDivElement>(null);
   const botaoRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -73,6 +74,10 @@ export function CampoSelect({
 
   useLayoutEffect(() => {
     if (!aberto) return;
+
+    // Dentro de <dialog showModal()>, o portal precisa ficar no próprio dialog
+    // (top layer); em document.body o menu fica atrás do backdrop.
+    setPortalAlvo(botaoRef.current?.closest("dialog") ?? document.body);
 
     function posicionar() {
       const botao = botaoRef.current;
@@ -156,14 +161,14 @@ export function CampoSelect({
 
       {erro ? <p id={`${id}-erro`} className="mt-1 text-xs text-negative">{erro}</p> : dica ? <p className="mt-1 text-xs text-muted-foreground">{dica}</p> : null}
 
-      {aberto ? createPortal(
+      {aberto && portalAlvo ? createPortal(
         <div
           ref={menuRef}
           id={listaId}
           role="listbox"
           aria-labelledby={`${id}-label`}
           style={{ top: posicao.top, left: posicao.left, width: posicao.width, maxHeight: posicao.maxHeight }}
-          className="fixed z-[100] flex flex-col overflow-hidden rounded-lg border border-border bg-surface p-1 shadow-xl shadow-black/30"
+          className="fixed z-[200] flex flex-col overflow-hidden rounded-lg border border-border bg-surface p-1 shadow-xl shadow-black/30"
         >
           {pesquisavel ? (
             <div className="relative mb-1 border-b border-border p-1 pb-2">
@@ -233,7 +238,7 @@ export function CampoSelect({
             }) : <p className="px-3 py-5 text-center text-sm text-muted-foreground">Nenhuma opção encontrada.</p>}
           </div>
         </div>,
-        document.body,
+        portalAlvo,
       ) : null}
     </div>
   );

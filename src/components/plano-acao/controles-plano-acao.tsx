@@ -11,6 +11,7 @@ import {
   type EstadoPlanoAcao,
 } from "@/app/(app)/plano-de-acao/acoes";
 import { CampoTexto } from "@/components/ui/campo";
+import { CampoData } from "@/components/ui/campo-data";
 import { Modal } from "@/components/ui/modal";
 import { AREAS_AVALIACAO } from "@/lib/avaliacoes";
 import type { PlanoAcao } from "@/lib/types";
@@ -111,13 +112,12 @@ export function DialogoPlanoAcao({
               defaultValue={valor("responsavel", acao?.responsavel)}
               erro={estado.campos?.responsavel}
             />
-            <CampoTexto
+            <CampoData
               id={`prazo-${sufixo}`}
               name="prazo"
               rotulo="Prazo"
-              tipo="date"
               required
-              defaultValue={valor("prazo", acao?.prazo)}
+              defaultValue={String(valor("prazo", acao?.prazo) || "")}
               erro={estado.campos?.prazo}
             />
           </div>

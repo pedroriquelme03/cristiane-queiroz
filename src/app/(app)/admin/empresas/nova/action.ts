@@ -34,6 +34,16 @@ export async function criarEmpresa(
     return { error: "Selecione um ciclo de cobrança válido." };
   }
 
+  if (
+    !process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    !process.env.SUPABASE_SERVICE_ROLE_KEY
+  ) {
+    return {
+      error:
+        "Falta a SUPABASE_SERVICE_ROLE_KEY no .env.local. Pegue em Supabase → Project Settings → API → service_role e reinicie o servidor.",
+    };
+  }
+
   const { data: plano, error: planoError } = await supabaseAdmin
     .from("planos")
     .select("id, ativo, trial_dias, preco_anual")

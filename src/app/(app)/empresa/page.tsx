@@ -4,6 +4,7 @@ import { salvarCadastroEmpresa } from "./actions";
 import { SeletorCliente } from "@/app/(app)/admin/visao-cliente/seletor-cliente";
 import { EditarCadastroModal } from "@/components/empresa/editar-cadastro-modal";
 import { CampoSelect, CampoTexto } from "@/components/ui/campo";
+import { CampoData } from "@/components/ui/campo-data";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { cnpj as formatarCnpj, data as formatarData } from "@/lib/format";
 import { getSessao } from "@/lib/sessao";
@@ -189,7 +190,12 @@ function FormCadastroEmpresa({
         />
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
-        <CampoTexto id="data_abertura" rotulo="Data de abertura" tipo="date" defaultValue={empresa.data_abertura ?? ""} />
+        <CampoData
+          id="data_abertura"
+          name="data_abertura"
+          rotulo="Data de abertura"
+          defaultValue={empresa.data_abertura ?? ""}
+        />
         <CampoTexto
           id="qtd_funcionarios"
           rotulo="Funcionários"

@@ -12,7 +12,7 @@ import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Kpi } from "@/components/ui/kpi";
 import { Progresso } from "@/components/ui/progresso";
 import { getHistoricoPlanosAcao, getPlanosAcao } from "@/lib/dados";
-import { data as formatarData, diasAte, moeda } from "@/lib/format";
+import { data as formatarData, dataHora, diasAte, moeda } from "@/lib/format";
 import { getSessao } from "@/lib/sessao";
 import type { AreaDiagnostico, PlanoAcao, StatusAcao } from "@/lib/types";
 
@@ -245,8 +245,5 @@ export default async function PlanoDeAcaoPage({
 }
 
 function formatarDataHora(iso: string) {
-  return new Date(iso).toLocaleString("pt-BR", {
-    dateStyle: "short",
-    timeStyle: "short",
-  });
+  return dataHora(iso);
 }

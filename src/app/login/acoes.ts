@@ -4,7 +4,11 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { createClient } from "@/lib/supabase/server";
+import {
+  createClient,
+  SESSAO_CURTA_SEGUNDOS,
+  SESSAO_LONGA_SEGUNDOS,
+} from "@/lib/supabase/server";
 import { supabaseConfigurado } from "@/lib/supabase/config";
 
 export interface EstadoLogin {
@@ -70,7 +74,10 @@ export async function entrar(
     return { campos, email: emailDigitado };
   }
 
-  const supabase = await createClient();
+  const lembrar = formData.get("lembrar") === "on";
+  const supabase = await createClient({
+    maxAge: lembrar ? SESSAO_LONGA_SEGUNDOS : SESSAO_CURTA_SEGUNDOS,
+  });
   const { error } = await supabase.auth.signInWithPassword({
     email: analise.data.email,
     password: analise.data.senha,
@@ -115,9 +122,7 @@ export async function entrar(
   const destinoFinal =
     destinoSeguro !== "/"
       ? destinoSeguro
-      : perfil.role === "admin"
-        ? "/admin"
-        : "/";
+      : "/inicio";
   
   revalidatePath("/", "layout");
   redirect(destinoFinal);

@@ -84,6 +84,7 @@ export const ABAS_FINANCEIRO: { href: string; rotulo: string; recurso: RecursoPl
   { href: "/financeiro/fluxo-de-caixa", rotulo: "Fluxo de caixa", recurso: "financeiro-basico" },
   { href: "/financeiro/contas-a-pagar", rotulo: "Contas a pagar", recurso: "financeiro-basico" },
   { href: "/financeiro/contas-a-receber", rotulo: "Contas a receber", recurso: "financeiro-basico" },
+  { href: "/financeiro/plano-de-contas", rotulo: "Plano de contas", recurso: "financeiro-basico" },
   { href: "/financeiro/receitas", rotulo: "Análise de receitas", recurso: "financeiro-avancado" },
   { href: "/financeiro/dre", rotulo: "DRE gerencial", recurso: "financeiro-avancado" },
   { href: "/financeiro/orcamento", rotulo: "Orçamento", recurso: "financeiro-avancado" },
@@ -94,4 +95,5 @@ export const ABAS_FINANCEIRO: { href: string; rotulo: string; recurso: RecursoPl
 export const ABAS_EMPRESA = [
   { href: "/empresa", rotulo: "Dados gerais" },
   { href: "/empresa/estrutura", rotulo: "Estrutura" },
+  { href: "/empresa/organograma", rotulo: "Organograma" },
 ];

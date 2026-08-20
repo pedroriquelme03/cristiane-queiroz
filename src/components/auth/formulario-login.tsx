@@ -1,13 +1,15 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useState, type FormEvent } from "react";
 import { useFormStatus } from "react-dom";
-import { AlertTriangle, LogIn } from "lucide-react";
+import { AlertTriangle, Eye, EyeOff, LogIn } from "lucide-react";
 
 import { entrar, type EstadoLogin } from "@/app/login/acoes";
 import { cn } from "@/lib/utils";
 
 const ESTADO_INICIAL: EstadoLogin = {};
+const CHAVE_EMAIL = "cq.login.email";
+const CHAVE_LEMBRAR = "cq.login.lembrar";
 
 export function FormularioLogin({
   redirecionarPara,
@@ -18,9 +20,45 @@ export function FormularioLogin({
   desabilitado: boolean;
 }) {
   const [estado, acao] = useActionState(entrar, ESTADO_INICIAL);
+  const [emailSalvo, setEmailSalvo] = useState("");
+  const [lembrar, setLembrar] = useState(false);
+  const [pronto, setPronto] = useState(false);
+
+  useEffect(() => {
+    try {
+      const querLembrar = localStorage.getItem(CHAVE_LEMBRAR) === "1";
+      setLembrar(querLembrar);
+      if (querLembrar) {
+        setEmailSalvo(localStorage.getItem(CHAVE_EMAIL) ?? "");
+      }
+    } catch {
+      // localStorage pode falhar em modo privado restrito
+    }
+    setPronto(true);
+  }, []);
+
+  function aoEnviar(event: FormEvent<HTMLFormElement>) {
+    const dados = new FormData(event.currentTarget);
+    const email = String(dados.get("email") ?? "").trim();
+    const querLembrar = dados.get("lembrar") === "on";
+
+    try {
+      if (querLembrar && email) {
+        localStorage.setItem(CHAVE_LEMBRAR, "1");
+        localStorage.setItem(CHAVE_EMAIL, email);
+      } else {
+        localStorage.removeItem(CHAVE_LEMBRAR);
+        localStorage.removeItem(CHAVE_EMAIL);
+      }
+    } catch {
+      // ignora falha de armazenamento local
+    }
+  }
+
+  const emailPadrao = estado.email ?? (pronto ? emailSalvo : undefined);
 
   return (
-    <form action={acao} className="space-y-4">
+    <form action={acao} onSubmit={aoEnviar} className="space-y-4">
       <input type="hidden" name="redirect" value={redirecionarPara} />
 
       {estado.erro ? (
@@ -38,7 +76,9 @@ export function FormularioLogin({
         rotulo="E-mail"
         tipo="email"
         autoComplete="username"
-        defaultValue={estado.email}
+        defaultValue={emailPadrao}
+        // remonta o input quando o e-mail salvo chega do localStorage
+        chave={pronto ? `email-${emailPadrao ?? ""}` : "email-loading"}
         erro={estado.campos?.email}
         desabilitado={desabilitado}
       />
@@ -51,6 +91,18 @@ export function FormularioLogin({
         desabilitado={desabilitado}
       />
 
+      <label className="flex items-center gap-2 text-sm text-foreground">
+        <input
+          type="checkbox"
+          name="lembrar"
+          checked={lembrar}
+          onChange={(event) => setLembrar(event.target.checked)}
+          disabled={desabilitado}
+          className="size-4 rounded border-border accent-brand disabled:cursor-not-allowed disabled:opacity-50"
+        />
+        Lembrar senha
+      </label>
+
       <Botao desabilitado={desabilitado} />
     </form>
   );
@@ -62,6 +114,7 @@ function Campo({
   tipo,
   autoComplete,
   defaultValue,
+  chave,
   erro,
   desabilitado,
 }: {
@@ -70,30 +123,55 @@ function Campo({
   tipo: string;
   autoComplete: string;
   defaultValue?: string;
+  chave?: string;
   erro?: string;
   desabilitado: boolean;
 }) {
+  const [senhaVisivel, setSenhaVisivel] = useState(false);
+  const ehSenha = tipo === "password";
+  const tipoInput = ehSenha ? (senhaVisivel ? "text" : "password") : tipo;
+
   return (
     <div>
       <label htmlFor={id} className="text-sm font-medium">
         {rotulo}
       </label>
-      <input
-        id={id}
-        name={id}
-        type={tipo}
-        autoComplete={autoComplete}
-        defaultValue={defaultValue}
-        disabled={desabilitado}
-        aria-invalid={erro ? true : undefined}
-        aria-describedby={erro ? `${id}-erro` : undefined}
-        className={cn(
-          "mt-1 w-full rounded-lg border bg-surface px-3 py-2 text-sm",
-          "focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none",
-          "disabled:cursor-not-allowed disabled:opacity-50",
-          erro ? "border-negative" : "border-border",
-        )}
-      />
+      <div className="relative mt-1">
+        <input
+          key={chave ?? id}
+          id={id}
+          name={id}
+          type={tipoInput}
+          autoComplete={autoComplete}
+          defaultValue={defaultValue}
+          disabled={desabilitado}
+          aria-invalid={erro ? true : undefined}
+          aria-describedby={erro ? `${id}-erro` : undefined}
+          className={cn(
+            "w-full rounded-lg border bg-surface px-3 py-2 text-sm",
+            "focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none",
+            "disabled:cursor-not-allowed disabled:opacity-50",
+            ehSenha ? "pr-10" : null,
+            erro ? "border-negative" : "border-border",
+          )}
+        />
+        {ehSenha ? (
+          <button
+            type="button"
+            onClick={() => setSenhaVisivel((v) => !v)}
+            disabled={desabilitado}
+            aria-label={senhaVisivel ? "Ocultar senha" : "Mostrar senha"}
+            aria-pressed={senhaVisivel}
+            className="absolute top-1/2 right-2 grid size-7 -translate-y-1/2 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-surface-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {senhaVisivel ? (
+              <EyeOff className="size-4" aria-hidden />
+            ) : (
+              <Eye className="size-4" aria-hidden />
+            )}
+          </button>
+        ) : null}
+      </div>
       {erro ? (
         <p id={`${id}-erro`} className="mt-1 text-xs text-negative">
           {erro}
