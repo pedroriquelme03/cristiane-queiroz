@@ -72,6 +72,15 @@ export interface PlanoConta {
   grupoDre: GrupoDre;
 }
 
+export interface ContaBancaria {
+  id: string;
+  nome: string;
+  banco: string | null;
+  tipo: "corrente" | "poupanca" | "caixa" | "aplicacao";
+  saldoInicial: number;
+  ativo: boolean;
+}
+
 export interface Lancamento {
   id: string;
   data: string;

@@ -49,8 +49,8 @@ export function DialogoTitulo({
       : ["receita"].includes(conta.tipo),
   );
   const hrefPlano = empresaId
-    ? `/financeiro/plano-de-contas?empresa=${empresaId}`
-    : "/financeiro/plano-de-contas";
+    ? `/cadastros/plano-de-contas?empresa=${empresaId}`
+    : "/cadastros/plano-de-contas";
 
   return (
     <>

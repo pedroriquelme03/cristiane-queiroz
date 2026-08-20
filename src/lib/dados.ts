@@ -11,6 +11,7 @@ import type {
   Alerta,
   AvaliacaoMaturidade,
   Colaborador,
+  ContaBancaria,
   DashboardKpis,
   Diagnostico,
   Documento,
@@ -167,6 +168,29 @@ export async function getPlanoContas(empresaIdParam?: string): Promise<PlanoCont
 
   if (error) throw new Error("Nao foi possivel carregar o plano de contas.");
   return (data ?? []).map(mapPlanoConta);
+}
+
+export async function getContasBancarias(empresaIdParam?: string): Promise<ContaBancaria[]> {
+  const empresaId = await resolverEmpresaId(empresaIdParam);
+  if (!empresaId) return [];
+
+  const supabase = await criarSupabaseObrigatorio();
+  const { data, error } = await supabase
+    .from("contas_bancarias")
+    .select("id, nome, banco, tipo, saldo_inicial, ativo")
+    .eq("empresa_id", empresaId)
+    .eq("ativo", true)
+    .order("nome");
+
+  if (error) throw new Error("Nao foi possivel carregar as contas bancarias.");
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    nome: row.nome,
+    banco: row.banco,
+    tipo: row.tipo as ContaBancaria["tipo"],
+    saldoInicial: Number(row.saldo_inicial),
+    ativo: Boolean(row.ativo),
+  }));
 }
 
 export async function getCompetencias(empresaIdParam?: string): Promise<string[]> {

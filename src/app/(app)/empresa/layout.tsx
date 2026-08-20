@@ -9,7 +9,7 @@ export default function EmpresaLayout({ children }: { children: ReactNode }) {
     <>
       <CabecalhoPagina
         titulo="Empresa"
-        descricao="Cadastro, estrutura e unidades"
+        descricao="Dados cadastrais e organograma"
       />
       <Abas itens={ABAS_EMPRESA} />
       <div className="space-y-6">{children}</div>

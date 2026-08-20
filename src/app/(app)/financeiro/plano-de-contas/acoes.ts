@@ -30,6 +30,8 @@ async function contextoEmpresa(formData: FormData) {
 
 function revalidar() {
   revalidatePath("/financeiro", "layout");
+  revalidatePath("/cadastros", "layout");
+  revalidatePath("/cadastros/plano-de-contas");
   revalidatePath("/financeiro/plano-de-contas");
   revalidatePath("/financeiro/contas-a-pagar");
   revalidatePath("/financeiro/contas-a-receber");

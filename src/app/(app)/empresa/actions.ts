@@ -26,6 +26,7 @@ async function validarPodeEditarEmpresa(empresaId: string) {
 function revalidarEmpresa(empresaId: string) {
   revalidatePath("/empresa");
   revalidatePath("/empresa/estrutura");
+  revalidatePath("/cadastros", "layout");
   revalidatePath("/inicio");
   revalidatePath(`/admin/empresas/${empresaId}`);
   revalidatePath(`/admin/empresas/${empresaId}/estrutura`);

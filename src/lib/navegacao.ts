@@ -6,6 +6,7 @@ import {
   FileText,
   Gauge,
   LayoutDashboard,
+  Library,
   ListChecks,
   Presentation,
   ShieldCheck,
@@ -35,6 +36,7 @@ export const NAVEGACAO: ItemNavegacao[] = [
   { href: "/empresa", rotulo: "Empresa", icone: Building2, grupo: "visao", recurso: "empresa" },
 
   { href: "/financeiro/fluxo-de-caixa", rotulo: "Financeiro", icone: Wallet, grupo: "gestao", recurso: "financeiro-basico" },
+  { href: "/cadastros", rotulo: "Cadastros", icone: Library, grupo: "gestao", recurso: "empresa" },
   { href: "/indicadores", rotulo: "Indicadores", icone: TrendingUp, grupo: "gestao", recurso: "indicadores" },
 
   { href: "/plano-de-acao", rotulo: "Plano de ação", icone: ClipboardList, grupo: "consultoria", recurso: "consultoria" },
@@ -84,7 +86,6 @@ export const ABAS_FINANCEIRO: { href: string; rotulo: string; recurso: RecursoPl
   { href: "/financeiro/fluxo-de-caixa", rotulo: "Fluxo de caixa", recurso: "financeiro-basico" },
   { href: "/financeiro/contas-a-pagar", rotulo: "Contas a pagar", recurso: "financeiro-basico" },
   { href: "/financeiro/contas-a-receber", rotulo: "Contas a receber", recurso: "financeiro-basico" },
-  { href: "/financeiro/plano-de-contas", rotulo: "Plano de contas", recurso: "financeiro-basico" },
   { href: "/financeiro/receitas", rotulo: "Análise de receitas", recurso: "financeiro-avancado" },
   { href: "/financeiro/dre", rotulo: "DRE gerencial", recurso: "financeiro-avancado" },
   { href: "/financeiro/orcamento", rotulo: "Orçamento", recurso: "financeiro-avancado" },
@@ -94,6 +95,14 @@ export const ABAS_FINANCEIRO: { href: string; rotulo: string; recurso: RecursoPl
 /** Abas da tela Empresa. */
 export const ABAS_EMPRESA = [
   { href: "/empresa", rotulo: "Dados gerais" },
-  { href: "/empresa/estrutura", rotulo: "Estrutura" },
   { href: "/empresa/organograma", rotulo: "Organograma" },
+];
+
+/** Abas da tela Cadastros (dados mestres usados nos selects do sistema). */
+export const ABAS_CADASTROS = [
+  { href: "/cadastros/unidades", rotulo: "Unidades" },
+  { href: "/cadastros/areas-e-cargos", rotulo: "Áreas e cargos" },
+  { href: "/cadastros/colaboradores", rotulo: "Colaboradores" },
+  { href: "/cadastros/plano-de-contas", rotulo: "Plano de contas" },
+  { href: "/cadastros/contas-bancarias", rotulo: "Contas bancárias" },
 ];

@@ -1,11 +1,11 @@
 import { redirect } from "next/navigation";
 
-export default async function PlanoDeContasRedirectPage({
+export default async function CadastrosPage({
   searchParams,
 }: {
   searchParams: Promise<{ empresa?: string | string[] }>;
 }) {
   const { empresa } = await searchParams;
   const query = typeof empresa === "string" ? `?empresa=${encodeURIComponent(empresa)}` : "";
-  redirect(`/cadastros/plano-de-contas${query}`);
+  redirect(`/cadastros/unidades${query}`);
 }
