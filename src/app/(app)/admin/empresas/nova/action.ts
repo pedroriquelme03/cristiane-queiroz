@@ -19,6 +19,8 @@ export async function criarEmpresa(
   const senha = formData.get("senha") as string;
   const planoId = String(formData.get("planoId") ?? "");
   const ciclo = String(formData.get("ciclo") ?? "");
+  const trialDiasTexto = String(formData.get("trialDias") ?? "").trim();
+  const trialDias = Number(trialDiasTexto);
 
   // Validação
   if (!razao_social || !nome_fantasia || !cnpj || !segmento || !email || !senha || !planoId || !ciclo) {
@@ -34,6 +36,10 @@ export async function criarEmpresa(
     return { error: "Selecione um ciclo de cobrança válido." };
   }
 
+  if (!/^\d{1,3}$/.test(trialDiasTexto) || trialDias > 365) {
+    return { error: "Informe de 0 a 365 dias para o teste gratuito." };
+  }
+
   if (
     !process.env.NEXT_PUBLIC_SUPABASE_URL ||
     !process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -46,7 +52,7 @@ export async function criarEmpresa(
 
   const { data: plano, error: planoError } = await supabaseAdmin
     .from("planos")
-    .select("id, ativo, trial_dias, preco_anual")
+    .select("id, ativo, preco_anual")
     .eq("id", planoId)
     .maybeSingle();
 
@@ -114,7 +120,6 @@ export async function criarEmpresa(
   // 5. Criar a assinatura no mesmo fluxo para que nenhum novo cliente fique
   // sem plano e, consequentemente, invisível na gestão de assinaturas.
   const hoje = new Date();
-  const trialDias = plano.trial_dias ?? 0;
   const trialFim = trialDias > 0 ? new Date(hoje) : null;
   trialFim?.setDate(trialFim.getDate() + trialDias);
   const { error: assinaturaError } = await supabaseAdmin.from("assinaturas").insert({

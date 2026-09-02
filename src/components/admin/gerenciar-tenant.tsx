@@ -185,6 +185,11 @@ function SecaoPlano({
   return (
     <section className="border-t border-border pt-4">
       <h3 className="mb-2 text-sm font-semibold">Plano e cobrança</h3>
+      {tenant.estado.status === "trial" && tenant.assinatura.trialFim ? (
+        <p className="mb-3 text-xs text-muted-foreground">
+          Em teste até {formatarData(tenant.assinatura.trialFim)}. A troca de plano mantém esta data.
+        </p>
+      ) : null}
       <form action={acao} className="flex flex-wrap items-end gap-3">
         <input type="hidden" name="assinaturaId" value={tenant.assinatura.id} />
         <CampoSelect

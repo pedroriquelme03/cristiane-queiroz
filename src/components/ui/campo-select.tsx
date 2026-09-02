@@ -24,6 +24,7 @@ export function CampoSelect({
   disabled,
   required,
   pesquisavel = false,
+  onValueChange,
 }: {
   id: string;
   name?: string;
@@ -36,6 +37,7 @@ export function CampoSelect({
   disabled?: boolean;
   required?: boolean;
   pesquisavel?: boolean;
+  onValueChange?: (valor: string) => void;
 }) {
   const valorInicial = Array.isArray(defaultValue)
     ? String(defaultValue[0] ?? "")
@@ -115,6 +117,7 @@ export function CampoSelect({
 
   function selecionar(novoValor: string) {
     setValor(novoValor);
+    onValueChange?.(novoValor);
     setAberto(false);
     setBusca("");
     requestAnimationFrame(() => botaoRef.current?.focus());

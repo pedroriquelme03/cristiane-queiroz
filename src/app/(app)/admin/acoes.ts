@@ -56,8 +56,39 @@ export async function salvarPlano(
     return { erro: AGUARDANDO_BANCO, valores: valoresEnviados(formData) };
   }
 
-  // TODO(supabase): upsert em public.planos (id vazio = insert). Só admin
-  // grava, garantido pelo RLS "planos: admin gerencia".
+  const sessao = await getSessao();
+  if (sessao.role !== "admin") {
+    return { erro: "Apenas administradores podem alterar planos." };
+  }
+
+  const id = String(formData.get("id") ?? "");
+  const plano = {
+    nome: analise.data.nome,
+    descricao: analise.data.descricao || null,
+    preco_mensal: analise.data.precoMensal,
+    preco_anual: analise.data.precoAnual,
+    trial_dias: analise.data.trialDias,
+    recursos: analise.data.recursos,
+    limite_usuarios: analise.data.limiteUsuarios,
+    limite_empresas: analise.data.limiteEmpresas,
+    publico: analise.data.publico,
+  };
+  const supabase = await createClient();
+  const consulta = id
+    ? supabase.from("planos").update(plano).eq("id", id)
+    : supabase.from("planos").insert(plano);
+  const { error } = await consulta;
+
+  if (error) {
+    return { erro: "Não foi possível salvar o plano.", valores: valoresEnviados(formData) };
+  }
+
+  revalidatePath("/admin/planos");
+  revalidatePath("/admin/empresas/nova");
+  revalidatePath("/admin/assinaturas");
+  revalidatePath("/admin/gestao");
+  revalidatePath("/assinatura");
+  revalidatePath("/apresentacao");
   return { ok: true };
 }
 
@@ -272,12 +303,16 @@ export async function trocarPlano(formData: FormData): Promise<EstadoAdmin> {
   const supabase = await createClient();
   const { data: plano, error: planoError } = await supabase
     .from("planos")
-    .select("preco_mensal, preco_anual")
+    .select("ativo, preco_mensal, preco_anual")
     .eq("id", planoId)
     .single();
 
-  if (planoError || !plano) {
+  if (planoError || !plano || !plano.ativo) {
     return { erro: "Plano não encontrado." };
+  }
+
+  if (ciclo === "anual" && plano.preco_anual === null) {
+    return { erro: "O plano selecionado não oferece ciclo anual." };
   }
 
   const valor = ciclo === "anual"
@@ -286,6 +321,8 @@ export async function trocarPlano(formData: FormData): Promise<EstadoAdmin> {
 
   const { error } = await supabase
     .from("assinaturas")
+    // trial_fim não é alterado: trocar o plano durante a avaliação não
+    // reinicia nem encurta os dias que foram concedidos ao cliente.
     .update({ plano_id: planoId, ciclo })
     .eq("id", assinaturaId);
 

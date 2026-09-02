@@ -97,8 +97,9 @@ export function DialogoPlano({ plano }: { plano?: Plano }) {
               id="trialDias"
               rotulo="Teste grátis (dias)"
               inputMode="numeric"
-              placeholder="0"
-              defaultValue={v("trialDias") ?? plano?.trialDias?.toString()}
+              placeholder="30"
+              dica="Novos clientes deste plano começam o teste com esta duração."
+              defaultValue={v("trialDias") ?? plano?.trialDias?.toString() ?? "30"}
               erro={estado.campos?.trialDias}
             />
             <CampoTexto

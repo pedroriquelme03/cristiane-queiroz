@@ -13,6 +13,8 @@ import type { Plano, Segmento } from "@/lib/types";
 export function FormNovoCliente({ planos }: { planos: Plano[] }) {
   const [estado, acao, pendente] = useActionState(criarEmpresa, { error: "" });
   const [cnpj, setCnpj] = useState("");
+  const [planoId, setPlanoId] = useState(() => planos[0]?.id ?? "");
+  const [trialDias, setTrialDias] = useState(() => String(planos[0]?.trialDias ?? 30));
   const [razaoSocial, setRazaoSocial] = useState("");
   const [nomeFantasia, setNomeFantasia] = useState("");
   const [segmento, setSegmento] = useState<Exclude<Segmento, "geral">>("servicos");
@@ -117,29 +119,50 @@ export function FormNovoCliente({ planos }: { planos: Plano[] }) {
       <div className="border-t border-border pt-4">
         <h3 className="mb-3 text-sm font-medium">Plano e cobrança</h3>
         {planos.length ? (
-          <div className="grid gap-3 sm:grid-cols-2">
-            <CampoSelect
-              id="planoId"
-              rotulo="Plano *"
-              required
-              defaultValue={planos[0].id}
-              opcoes={planos.map((plano) => ({
-                valor: plano.id,
-                rotulo: plano.nome,
-                detalhe: moeda(plano.precoMensal),
-              }))}
-            />
-            <CampoSelect
-              id="ciclo"
-              rotulo="Ciclo *"
-              required
-              defaultValue="mensal"
-              opcoes={[
-                { valor: "mensal", rotulo: "Mensal" },
-                { valor: "anual", rotulo: "Anual" },
-              ]}
-            />
-          </div>
+          <>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <CampoSelect
+                id="planoId"
+                rotulo="Plano *"
+                required
+                defaultValue={planoId}
+                onValueChange={(novoPlanoId) => {
+                  setPlanoId(novoPlanoId);
+                  const novoPlano = planos.find((plano) => plano.id === novoPlanoId);
+                  setTrialDias(String(novoPlano?.trialDias ?? 0));
+                }}
+                opcoes={planos.map((plano) => ({
+                  valor: plano.id,
+                  rotulo: plano.nome,
+                  detalhe: moeda(plano.precoMensal),
+                }))}
+              />
+              <CampoSelect
+                id="ciclo"
+                rotulo="Ciclo *"
+                required
+                defaultValue="mensal"
+                opcoes={[
+                  { valor: "mensal", rotulo: "Mensal" },
+                  { valor: "anual", rotulo: "Anual" },
+                ]}
+              />
+              <CampoTexto
+                id="trialDias"
+                rotulo="Teste gratuito (dias) *"
+                required
+                inputMode="numeric"
+                min={0}
+                max={365}
+                value={trialDias}
+                dica="Você pode ajustar este prazo somente para este cliente."
+                onChange={(evento) => setTrialDias(evento.currentTarget.value.replace(/\D/g, "").slice(0, 3))}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              O prazo começa com o padrão do plano escolhido, mas pode ser ajustado acima. Durante o teste, a administradora pode trocar o plano sem alterar a data final da avaliação.
+            </p>
+          </>
         ) : (
           <p role="alert" className="rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm text-warning">
             Cadastre ou ative um plano antes de criar um cliente.
