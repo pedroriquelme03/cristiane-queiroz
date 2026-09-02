@@ -2,13 +2,17 @@ import { LogOut } from "lucide-react";
 
 import { sair } from "@/app/login/acoes";
 import { ContextoAdminTopo } from "@/components/layout/contexto-admin-topo";
+import { SeletorCompetencia } from "@/components/layout/seletor-competencia";
 import { SeletorTema } from "@/components/layout/seletor-tema";
-import { getCompetenciaAtual } from "@/lib/dados";
-import { competenciaExtenso } from "@/lib/format";
+import { getCompetenciaAtual, listarCompetenciasOpcoes } from "@/lib/dados";
 import { getSessao } from "@/lib/sessao";
 
 export async function BarraTopo() {
-  const [sessao, competencia] = await Promise.all([getSessao(), getCompetenciaAtual()]);
+  const sessao = await getSessao();
+  const [competencia, opcoes] = await Promise.all([
+    getCompetenciaAtual(),
+    listarCompetenciasOpcoes(sessao.empresaId || undefined),
+  ]);
   const nomeEmpresa = sessao.empresa?.nome ?? "Vínculo de empresa pendente";
   const unidades = sessao.empresa?.unidades ?? 0;
   const colaboradores = sessao.empresa?.colaboradores ?? 0;
@@ -17,7 +21,9 @@ export async function BarraTopo() {
   return (
     <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-surface px-6 py-3">
       <div className="flex items-center gap-3">
-        {sessao.role === "admin" ? <ContextoAdminTopo /> : (
+        {sessao.role === "admin" ? (
+          <ContextoAdminTopo />
+        ) : (
           <>
             <span className="grid size-8 place-items-center rounded-md bg-brand-soft text-xs font-semibold text-brand">
               {nomeEmpresa.slice(0, 2).toUpperCase()}
@@ -33,12 +39,7 @@ export async function BarraTopo() {
       </div>
 
       <div className="flex items-center gap-3">
-        <span className="rounded-lg border border-border bg-surface-muted px-3 py-1.5 text-xs text-muted-foreground">
-          Competência:{" "}
-          <strong className="font-medium text-foreground">
-            {competenciaExtenso(competencia)}
-          </strong>
-        </span>
+        <SeletorCompetencia competencia={competencia} opcoes={opcoes} />
         <SeletorTema />
         <div className="flex items-center gap-2">
           <span className="grid size-8 place-items-center rounded-full bg-brand text-xs font-semibold text-brand-foreground">

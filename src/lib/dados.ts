@@ -7,6 +7,11 @@
 import { supabaseConfigurado } from "@/lib/supabase/config";
 import { createClient } from "@/lib/supabase/server";
 import { getSessao } from "@/lib/sessao";
+import {
+  gerarCompetenciasRecentes,
+  getCompetenciaSelecionada,
+  mesDe,
+} from "@/lib/competencia";
 import type {
   Alerta,
   AvaliacaoMaturidade,
@@ -209,8 +214,20 @@ export async function getCompetencias(empresaIdParam?: string): Promise<string[]
   return competencias.length ? competencias : [mesDe(hoje())];
 }
 
+/** Meses disponíveis no seletor: recentes + meses com lançamentos. */
+export async function listarCompetenciasOpcoes(empresaIdParam?: string): Promise<string[]> {
+  const selecionada = await getCompetenciaSelecionada();
+  const [doBanco, recentes] = await Promise.all([
+    getCompetencias(empresaIdParam).catch(() => [selecionada]),
+    Promise.resolve(gerarCompetenciasRecentes(36, selecionada)),
+  ]);
+  const conjunto = new Set([selecionada, mesDe(hoje()), ...doBanco, ...recentes]);
+  return [...conjunto].sort((a, b) => b.localeCompare(a));
+}
+
+/** Competência ativa na plataforma (escolhida pelo usuário ou mês corrente). */
 export async function getCompetenciaAtual(): Promise<string> {
-  return mesDe(hoje());
+  return getCompetenciaSelecionada();
 }
 
 // ---------------------------------------------------------------------------
@@ -603,11 +620,6 @@ export async function getAlertas(empresaIdParam?: string): Promise<Alerta[]> {
 // ---------------------------------------------------------------------------
 // Helpers de data
 // ---------------------------------------------------------------------------
-
-/** Primeiro dia do mes de uma data ISO. */
-function mesDe(data: string) {
-  return `${data.slice(0, 7)}-01`;
-}
 
 export { intervaloDoMes };
 
