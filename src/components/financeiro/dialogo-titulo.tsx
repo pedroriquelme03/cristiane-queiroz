@@ -15,11 +15,16 @@ import { CampoSelect, CampoTexto } from "@/components/ui/campo";
 import { CampoData } from "@/components/ui/campo-data";
 import { CampoMoeda } from "@/components/ui/campo-moeda";
 import { Modal } from "@/components/ui/modal";
-import { moeda as formatarMoeda } from "@/lib/format";
-import type { PlanoConta, Titulo } from "@/lib/types";
+import { moeda as formatarMoeda, documentoPessoa } from "@/lib/format";
+import type { ClienteConsultoria, PlanoConta, Titulo } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const ESTADO_INICIAL: EstadoFormulario = {};
+
+type ClienteConsultoriaOpcao = Pick<
+  ClienteConsultoria,
+  "nome" | "documento" | "valorMensal"
+>;
 
 export function DialogoTitulo({
   tipo,
@@ -27,6 +32,7 @@ export function DialogoTitulo({
   empresaId,
   titulo,
   fixaPadrao = false,
+  clientesConsultoria,
 }: {
   tipo: Titulo["tipo"];
   contas: PlanoConta[];
@@ -34,12 +40,28 @@ export function DialogoTitulo({
   titulo?: Titulo;
   /** Abre o formulário já marcado como conta fixa. */
   fixaPadrao?: boolean;
+  /** Clientes de consultoria (admin) — select no recebimento fixo. */
+  clientesConsultoria?: ClienteConsultoriaOpcao[];
 }) {
   const [aberto, setAberto] = useState(false);
   const [estado, acao] = useActionState(salvarTitulo, ESTADO_INICIAL);
   const [contaFixa, setContaFixa] = useState(Boolean(titulo?.fixa) || Boolean(fixaPadrao));
+  const clienteInicial = titulo?.contraparte ?? "";
+  const [contraparteSelecionada, setContraparteSelecionada] = useState(clienteInicial);
+  const [valorMensalCliente, setValorMensalCliente] = useState<number | undefined>(() => {
+    const cliente = clientesConsultoria?.find((item) => item.nome === clienteInicial);
+    return cliente?.valorMensal;
+  });
+  const [documentoCliente, setDocumentoCliente] = useState<string | undefined>(() => {
+    const cliente = clientesConsultoria?.find((item) => item.nome === clienteInicial);
+    return cliente?.documento;
+  });
   const ehPagar = tipo === "pagar";
   const editando = Boolean(titulo);
+  const usarSelectCliente =
+    !ehPagar &&
+    fixaPadrao &&
+    Boolean(clientesConsultoria?.length);
   const sufixo = titulo?.id ?? `novo-${tipo}`;
   const valor = (campo: string, padrao?: string | number | null) =>
     estado.valores?.[campo] ?? padrao ?? "";
@@ -51,6 +73,20 @@ export function DialogoTitulo({
   const hrefPlano = empresaId
     ? `/cadastros/plano-de-contas?empresa=${empresaId}`
     : "/cadastros/plano-de-contas";
+
+  function aoSelecionarCliente(nome: string) {
+    setContraparteSelecionada(nome);
+    const cliente = clientesConsultoria?.find((item) => item.nome === nome);
+    if (!cliente) return;
+    setValorMensalCliente(cliente.valorMensal);
+    setDocumentoCliente(cliente.documento);
+  }
+
+  const valorTituloPadrao = valor("valor", titulo?.valor ?? valorMensalCliente ?? "");
+  const documentoTituloPadrao = valor(
+    "documento",
+    titulo?.documento ?? (documentoCliente ? documentoPessoa(documentoCliente) : undefined),
+  );
 
   return (
     <>
@@ -119,14 +155,33 @@ export function DialogoTitulo({
           <input type="hidden" name="empresaId" value={empresaId ?? ""} />
           {titulo ? <input type="hidden" name="id" value={titulo.id} /> : null}
 
-          <CampoTexto
-            id={`contraparte-${sufixo}`}
-            name="contraparte"
-            rotulo={ehPagar ? "Fornecedor" : "Cliente"}
-            required
-            defaultValue={valor("contraparte", titulo?.contraparte)}
-            erro={estado.campos?.contraparte}
-          />
+          {usarSelectCliente ? (
+            <CampoSelect
+              id={`contraparte-${sufixo}`}
+              name="contraparte"
+              rotulo="Cliente"
+              required
+              pesquisavel
+              defaultValue={contraparteSelecionada}
+              onValueChange={aoSelecionarCliente}
+              opcoes={(clientesConsultoria ?? []).map((cliente) => ({
+                valor: cliente.nome,
+                rotulo: cliente.nome,
+                detalhe: documentoPessoa(cliente.documento),
+              }))}
+              erro={estado.campos?.contraparte}
+              dica="Clientes cadastrados em Administração → Clientes → Consultoria"
+            />
+          ) : (
+            <CampoTexto
+              id={`contraparte-${sufixo}`}
+              name="contraparte"
+              rotulo={ehPagar ? "Fornecedor" : "Cliente"}
+              required
+              defaultValue={valor("contraparte", titulo?.contraparte)}
+              erro={estado.campos?.contraparte}
+            />
+          )}
 
           <div className="grid gap-4 sm:grid-cols-2">
             <CampoData
@@ -147,17 +202,19 @@ export function DialogoTitulo({
           </div>
 
           <CampoMoeda
-            key={`valor-titulo-${sufixo}-${String(valor("valor", titulo?.valor))}`}
+            key={`valor-titulo-${sufixo}-${String(valorTituloPadrao ?? "")}`}
             id={`valor-titulo-${sufixo}`}
             name="valor"
             rotulo="Valor total"
             required
-            defaultValue={valor("valor", titulo?.valor)}
+            defaultValue={valorTituloPadrao}
             erro={estado.campos?.valor}
             dica={
               titulo?.valorPago
                 ? `Já baixado: ${formatarMoeda(titulo.valorPago)}`
-                : "Digite o valor; a formatação acompanha a moeda escolhida."
+                : usarSelectCliente
+                  ? "Preenchido com o valor mensal do cliente; ajuste se necessário."
+                  : "Digite o valor; a formatação acompanha a moeda escolhida."
             }
           />
           <input type="hidden" name="valorPago" value="0" />
@@ -198,11 +255,12 @@ export function DialogoTitulo({
               ) : null}
             </div>
             <CampoTexto
+              key={`documento-titulo-${sufixo}-${documentoTituloPadrao ?? ""}`}
               id={`documento-titulo-${sufixo}`}
               name="documento"
               rotulo="Documento"
               placeholder="Opcional"
-              defaultValue={valor("documento", titulo?.documento)}
+              defaultValue={documentoTituloPadrao}
               erro={estado.campos?.documento}
             />
           </div>

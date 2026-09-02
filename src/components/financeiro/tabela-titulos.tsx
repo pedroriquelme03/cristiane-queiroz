@@ -4,7 +4,7 @@ import {
   DialogoTitulo,
   ExcluirTitulo,
 } from "@/components/financeiro/dialogo-titulo";
-import { statusEfetivo } from "@/lib/dados";
+import { statusEfetivo } from "@/lib/titulos";
 import { data as formatarData, diasAte, moeda } from "@/lib/format";
 import type { PlanoConta, Titulo } from "@/lib/types";
 

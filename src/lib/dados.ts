@@ -9,9 +9,9 @@ import { createClient } from "@/lib/supabase/server";
 import { getSessao } from "@/lib/sessao";
 import {
   gerarCompetenciasRecentes,
-  getCompetenciaSelecionada,
   mesDe,
 } from "@/lib/competencia";
+import { getCompetenciaSelecionada } from "@/lib/competencia-servidor";
 import type {
   Alerta,
   AvaliacaoMaturidade,

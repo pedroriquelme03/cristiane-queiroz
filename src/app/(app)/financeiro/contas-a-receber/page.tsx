@@ -3,6 +3,7 @@ import { TabelaContasFixas } from "@/components/financeiro/tabela-contas-fixas";
 import { TabelaTitulos } from "@/components/financeiro/tabela-titulos";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Kpi } from "@/components/ui/kpi";
+import { getClientesConsultoria } from "@/lib/dados-clientes";
 import { agruparContasFixas, getPlanoContas, getTitulos, statusEfetivo } from "@/lib/dados";
 import { moeda, percentual } from "@/lib/format";
 import { getSessao } from "@/lib/sessao";
@@ -16,10 +17,16 @@ export default async function ContasAReceberPage({
   const empresaId = typeof empresa === "string" ? empresa : undefined;
   const empresaIdAtiva = sessao.role === "admin" ? empresaId : sessao.empresaId;
   const podeEditar = Boolean(empresaIdAtiva) && (sessao.role === "admin" || sessao.role === "cliente");
-  const [titulos, contas] = await Promise.all([
+  const [titulos, contas, clientesConsultoria] = await Promise.all([
     getTitulos("receber", empresaIdAtiva),
     getPlanoContas(empresaIdAtiva),
+    sessao.role === "admin" ? getClientesConsultoria() : Promise.resolve([]),
   ]);
+  const opcoesClientes = clientesConsultoria.map(({ nome, documento, valorMensal }) => ({
+    nome,
+    documento,
+    valorMensal,
+  }));
 
   const abertos = titulos.filter(
     (t) => !t.fixa && ["aberto", "parcial"].includes(statusEfetivo(t)),
@@ -75,7 +82,13 @@ export default async function ContasAReceberPage({
           descricao="Uma linha por cadastro — parcelas mensais agrupadas com meses restantes a receber."
           acao={
             podeEditar ? (
-              <DialogoTitulo tipo="receber" contas={contas} empresaId={empresaIdAtiva} fixaPadrao />
+              <DialogoTitulo
+                tipo="receber"
+                contas={contas}
+                empresaId={empresaIdAtiva}
+                fixaPadrao
+                clientesConsultoria={opcoesClientes}
+              />
             ) : null
           }
         />

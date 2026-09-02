@@ -1,6 +1,3 @@
-import { cache } from "react";
-import { cookies } from "next/headers";
-
 export const CHAVE_COMPETENCIA = "cq.competencia";
 
 /** Normaliza para o primeiro dia do mês (aaaa-mm-01). */
@@ -31,11 +28,3 @@ export function gerarCompetenciasRecentes(quantidade = 36, referencia?: string):
   }
   return lista;
 }
-
-/** Competência escolhida pelo usuário (cookie) ou mês corrente. */
-export const getCompetenciaSelecionada = cache(async (): Promise<string> => {
-  const jar = await cookies();
-  const salva = jar.get(CHAVE_COMPETENCIA)?.value;
-  const normalizada = salva ? normalizarCompetencia(salva) : null;
-  return normalizada ?? mesDe(hojeIso());
-});
