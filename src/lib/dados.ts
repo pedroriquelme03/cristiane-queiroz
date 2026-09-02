@@ -308,6 +308,36 @@ export async function getFluxoProjetado(dias = 90, empresaIdParam?: string): Pro
   }));
 }
 
+/** Títulos em aberto com vencimento no período (contas/recebimentos fixos e avulsos). */
+export async function getPrevistoPeriodo(
+  inicio: string,
+  fim: string,
+  empresaIdParam?: string,
+): Promise<{ aReceber: number; aPagar: number }> {
+  const empresaId = await resolverEmpresaId(empresaIdParam);
+  if (!empresaId) return { aReceber: 0, aPagar: 0 };
+
+  const supabase = await criarSupabaseObrigatorio();
+  const { data, error } = await supabase
+    .from("titulos")
+    .select("tipo, valor, valor_pago")
+    .eq("empresa_id", empresaId)
+    .in("status", ["aberto", "parcial"])
+    .gte("vencimento", inicio)
+    .lte("vencimento", fim);
+
+  if (error) throw new Error("Nao foi possivel carregar titulos previstos.");
+
+  let aReceber = 0;
+  let aPagar = 0;
+  for (const row of data ?? []) {
+    const saldo = numero(row.valor) - numero(row.valor_pago);
+    if (row.tipo === "receber") aReceber += saldo;
+    else aPagar += saldo;
+  }
+  return { aReceber, aPagar };
+}
+
 export async function getLancamentos(
   inicio: string,
   fim: string,

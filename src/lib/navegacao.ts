@@ -9,7 +9,6 @@ import {
   Library,
   ListChecks,
   Presentation,
-  ShieldCheck,
   Stethoscope,
   TrendingUp,
   Users,
@@ -47,7 +46,7 @@ export const NAVEGACAO: ItemNavegacao[] = [
 
   { href: "/assinatura", rotulo: "Assinatura", icone: CreditCard, grupo: "conta", papeis: ["cliente"], recurso: "assinatura" },
 
-  { href: "/admin/gestao", rotulo: "Assinaturas dos clientes", icone: ShieldCheck, grupo: "admin", papeis: ["admin"] },
+  { href: "/admin/clientes", rotulo: "Clientes", icone: Users, grupo: "admin", papeis: ["admin"] },
   { href: "/admin/apresentacao", rotulo: "Apresentações", icone: Presentation, grupo: "admin", papeis: ["admin"] },
   { href: "/admin/empresas", rotulo: "Usuários", icone: Users, grupo: "admin", papeis: ["admin"] },
   { href: "/admin/planos", rotulo: "Planos", icone: ListChecks, grupo: "admin", papeis: ["admin"] },
@@ -80,6 +79,12 @@ export function itensVisiveis(
     return true;
   });
 }
+
+/** Abas da tela Clientes (admin). */
+export const ABAS_CLIENTES = [
+  { href: "/admin/clientes/consultoria", rotulo: "Consultoria" },
+  { href: "/admin/clientes/assinante", rotulo: "Assinante" },
+];
 
 /** Abas da tela Financeiro. */
 export const ABAS_FINANCEIRO: { href: string; rotulo: string; recurso: RecursoPlano }[] = [

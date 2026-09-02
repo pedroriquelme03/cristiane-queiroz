@@ -188,7 +188,7 @@ function Botao({ desabilitado }: { desabilitado: boolean }) {
     <button
       type="submit"
       disabled={desabilitado || pending}
-      className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-sm font-medium text-brand-foreground transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
+      className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-sm font-medium text-brand-foreground transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
     >
       <LogIn className="size-4" aria-hidden />
       {pending ? "Entrando…" : "Entrar"}

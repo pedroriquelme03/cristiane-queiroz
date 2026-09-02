@@ -121,6 +121,18 @@ export function cnpj(valor: string) {
   return valor.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5");
 }
 
+export function cpf(valor: string) {
+  return valor.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, "$1.$2.$3-$4");
+}
+
+/** Formata CPF ou CNPJ conforme o tamanho. */
+export function documentoPessoa(valor: string) {
+  const digitos = valor.replace(/\D/g, "");
+  if (digitos.length === 11) return cpf(digitos);
+  if (digitos.length === 14) return cnpj(digitos);
+  return valor;
+}
+
 export function tamanhoArquivo(bytes: number) {
   const unidades = ["B", "KB", "MB", "GB"];
   let i = 0;

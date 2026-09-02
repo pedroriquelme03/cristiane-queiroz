@@ -12,7 +12,9 @@ import {
   getFluxoProjetado,
   getLancamentos,
   getPlanoContas,
+  getPrevistoPeriodo,
   intervaloDoMes,
+  saldoEmCaixa,
 } from "@/lib/dados";
 import { competenciaExtenso, data as formatarData, moeda } from "@/lib/format";
 import { getSessao } from "@/lib/sessao";
@@ -29,31 +31,71 @@ export default async function FluxoDeCaixaPage({
   const competencia = await getCompetenciaAtual();
   const { inicio, fim } = intervaloDoMes(competencia);
 
-  const [fluxo, projecao, lancamentos, contas] = await Promise.all([
+  const [fluxo, projecao, lancamentos, contas, previsto] = await Promise.all([
     getFluxoDiario(inicio, fim, empresaIdAtiva),
     getFluxoProjetado(90, empresaIdAtiva),
     getLancamentos(inicio, fim, empresaIdAtiva),
     getPlanoContas(empresaIdAtiva),
+    getPrevistoPeriodo(inicio, fim, empresaIdAtiva),
   ]);
 
   const nomeConta = (id: string | null) =>
     contas.find((c) => c.id === id)?.nome ?? "Sem classificação";
 
-  const entradas = fluxo.reduce((s, p) => s + p.entradas, 0);
-  const saidas = fluxo.reduce((s, p) => s + p.saidas, 0);
-  const saldoFinal = fluxo[fluxo.length - 1]?.saldoAcumulado ?? 0;
+  const entradasRealizadas = fluxo.reduce((s, p) => s + p.entradas, 0);
+  const saidasRealizadas = fluxo.reduce((s, p) => s + p.saidas, 0);
+  const entradas = entradasRealizadas + previsto.aReceber;
+  const saidas = saidasRealizadas + previsto.aPagar;
+  const resultado = entradas - saidas;
+
+  const saldoRealizado = fluxo.length
+    ? fluxo[fluxo.length - 1].saldoAcumulado
+    : empresaIdAtiva
+      ? await saldoEmCaixa(empresaIdAtiva, fim)
+      : 0;
+  const saldoFinal = saldoRealizado + previsto.aReceber - previsto.aPagar;
+
+  const notaRealizadoPrevisto = (realizado: number, previstoValor: number, rotuloPrevisto: string) => {
+    if (realizado <= 0 && previstoValor <= 0) return undefined;
+    if (realizado <= 0) return `${moeda(previstoValor)} ${rotuloPrevisto}`;
+    if (previstoValor <= 0) return `${moeda(realizado)} realizadas`;
+    return `${moeda(realizado)} realizadas · ${moeda(previstoValor)} ${rotuloPrevisto}`;
+  };
 
   return (
     <>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Kpi rotulo="Entradas no mês" valor={moeda(entradas)} tom="positivo" />
-        <Kpi rotulo="Saídas no mês" valor={moeda(saidas)} tom="negativo" />
+        <Kpi
+          rotulo="Entradas no mês"
+          valor={moeda(entradas)}
+          tom="positivo"
+          nota={notaRealizadoPrevisto(entradasRealizadas, previsto.aReceber, "a receber")}
+        />
+        <Kpi
+          rotulo="Saídas no mês"
+          valor={moeda(saidas)}
+          tom="negativo"
+          nota={notaRealizadoPrevisto(saidasRealizadas, previsto.aPagar, "a pagar")}
+        />
         <Kpi
           rotulo="Resultado de caixa"
-          valor={moeda(entradas - saidas)}
-          tom={entradas - saidas >= 0 ? "positivo" : "negativo"}
+          valor={moeda(resultado)}
+          tom={resultado >= 0 ? "positivo" : "negativo"}
+          nota={
+            previsto.aReceber || previsto.aPagar
+              ? "Realizado + títulos com vencimento no mês"
+              : undefined
+          }
         />
-        <Kpi rotulo="Saldo ao fim do período" valor={moeda(saldoFinal)} />
+        <Kpi
+          rotulo="Saldo ao fim do período"
+          valor={moeda(saldoFinal)}
+          nota={
+            previsto.aReceber || previsto.aPagar
+              ? `${moeda(saldoRealizado)} realizado + previsto`
+              : undefined
+          }
+        />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">

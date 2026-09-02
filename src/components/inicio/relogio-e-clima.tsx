@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Cake, CloudSun, MapPin } from "lucide-react";
 
-import { cn } from "@/lib/utils";
+import { Kpi } from "@/components/ui/kpi";
 
 type Clima = {
   temperatura: number;
@@ -94,11 +94,9 @@ async function buscarClima(cidade: string, uf?: string): Promise<Clima | null> {
 export function RelogioEClima({
   cidade,
   uf,
-  className,
 }: {
   cidade: string | null;
   uf: string | null;
-  className?: string;
 }) {
   const [agora, setAgora] = useState(() => new Date());
   const [clima, setClima] = useState<Clima | null>(null);
@@ -127,57 +125,54 @@ export function RelogioEClima({
   const local =
     cidade && uf ? `${cidade}/${uf}` : cidade ? cidade : "Cidade não cadastrada";
 
+  const notaClima = clima
+    ? `${clima.temperatura}°C · ${clima.descricao}`
+    : cidade
+      ? "Carregando clima…"
+      : "Cadastre a cidade da matriz em Empresa → Estrutura.";
+
   return (
-    <div
-      className={cn(
-        "flex flex-col items-center gap-2 text-center text-sm text-muted-foreground",
-        className,
-      )}
-    >
-      <p className="capitalize">{data}</p>
-      <p className="tabular text-3xl font-semibold tracking-tight text-foreground">{hora}</p>
-      <p className="inline-flex items-center gap-1.5">
-        <MapPin className="size-3.5" aria-hidden />
-        {local}
-      </p>
-      {clima ? (
-        <p className="inline-flex items-center gap-1.5 text-foreground">
-          <CloudSun className="size-4 text-brand" aria-hidden />
-          {clima.temperatura}°C · {clima.descricao}
-        </p>
-      ) : cidade ? (
-        <p className="text-xs">Carregando clima…</p>
-      ) : (
-        <p className="text-xs">Cadastre a cidade da matriz em Empresa → Estrutura.</p>
-      )}
-    </div>
+    <Kpi
+      rotulo="Data, hora e clima"
+      valor={hora}
+      icone={<CloudSun className="size-4" aria-hidden />}
+      nota={
+        <span className="block space-y-1">
+          <span className="capitalize">{data}</span>
+          <span className="flex items-center gap-1">
+            <MapPin className="size-3 shrink-0" aria-hidden />
+            {local}
+          </span>
+          <span>{notaClima}</span>
+        </span>
+      }
+    />
   );
 }
 
-export function ListaAniversariantes({
-  nomes,
-}: {
-  nomes: string[];
-}) {
-  if (nomes.length === 0) {
-    return (
-      <p className="text-center text-sm text-muted-foreground">
-        Nenhum colaborador faz aniversário hoje.
-      </p>
-    );
-  }
-
+export function ListaAniversariantes({ nomes }: { nomes: string[] }) {
   return (
-    <ul className="mx-auto flex max-w-lg flex-wrap items-center justify-center gap-2">
-      {nomes.map((nome) => (
-        <li
-          key={nome}
-          className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1.5 text-sm"
-        >
-          <Cake className="size-3.5 text-brand" aria-hidden />
-          {nome}
-        </li>
-      ))}
-    </ul>
+    <Kpi
+      rotulo="Aniversariantes do dia"
+      valor={String(nomes.length)}
+      tom={nomes.length > 0 ? "atencao" : "neutro"}
+      icone={<Cake className="size-4" aria-hidden />}
+      nota={
+        nomes.length === 0 ? (
+          "Nenhum colaborador faz aniversário hoje."
+        ) : (
+          <span className="flex flex-wrap gap-1.5">
+            {nomes.map((nome) => (
+              <span
+                key={nome}
+                className="inline-flex items-center gap-1 rounded-full border border-border bg-surface-muted px-2 py-0.5 text-xs text-foreground"
+              >
+                {nome}
+              </span>
+            ))}
+          </span>
+        )
+      }
+    />
   );
 }

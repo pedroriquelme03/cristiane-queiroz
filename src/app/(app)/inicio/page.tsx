@@ -2,7 +2,7 @@ import { Wallet } from "lucide-react";
 
 import { ListaAniversariantes, RelogioEClima } from "@/components/inicio/relogio-e-clima";
 import { MarcaCristianeQueiroz } from "@/components/layout/marca-cristiane-queiroz";
-import { Badge } from "@/components/ui/badge";
+import { Kpi } from "@/components/ui/kpi";
 import {
   getAniversariantesHoje,
   getCidadeEmpresa,
@@ -11,7 +11,6 @@ import {
 } from "@/lib/dados";
 import { moeda } from "@/lib/format";
 import { getSessao } from "@/lib/sessao";
-import { cn } from "@/lib/utils";
 
 const SERVICOS = [
   "Sistema de Controle Financeiro",
@@ -52,55 +51,27 @@ export default async function InicioPage({
         ))}
       </ul>
 
-      <section className="w-full max-w-md space-y-3 text-center">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Status do caixa
-          {empresa ? ` · ${empresa.nomeFantasia}` : ""}
-        </p>
-        {saldo === null ? (
-          <p className="text-sm text-muted-foreground">
-            {sessao.role === "admin"
-              ? "Selecione uma empresa para ver o caixa."
-              : "Não foi possível carregar o saldo em caixa."}
-          </p>
-        ) : (
-          <div
-            className={cn(
-              "rounded-xl border px-6 py-5",
-              caixaPositivo
-                ? "border-positive/30 bg-positive-soft/40"
-                : "border-negative/30 bg-negative-soft/40",
-            )}
-          >
-            <div className="flex items-center justify-center gap-2 text-muted-foreground">
-              <Wallet className="size-4" aria-hidden />
-              <span className="text-xs">Saldo em caixa</span>
-            </div>
-            <p
-              className={cn(
-                "mt-2 tabular text-3xl font-semibold tracking-tight",
-                caixaPositivo ? "text-positive" : "text-negative",
-              )}
-            >
-              {moeda(saldo)}
-            </p>
-            <div className="mt-3 flex justify-center">
-              <Badge tom={caixaPositivo ? "positivo" : "negativo"}>
-                {caixaPositivo ? "Caixa positivo" : "Caixa negativo"}
-              </Badge>
-            </div>
-          </div>
-        )}
-      </section>
+      <div className="grid w-full max-w-4xl gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <Kpi
+          rotulo={empresa ? `Saldo em caixa · ${empresa.nomeFantasia}` : "Saldo em caixa"}
+          valor={saldo === null ? "—" : moeda(saldo)}
+          tom={saldo === null ? "neutro" : caixaPositivo ? "positivo" : "negativo"}
+          icone={<Wallet className="size-4" aria-hidden />}
+          nota={
+            saldo === null
+              ? sessao.role === "admin"
+                ? "Selecione uma empresa para ver o caixa."
+                : "Não foi possível carregar o saldo em caixa."
+              : caixaPositivo
+                ? "Caixa positivo"
+                : "Caixa negativo"
+          }
+        />
 
-      <RelogioEClima cidade={cidade?.cidade ?? null} uf={cidade?.uf ?? null} />
+        <RelogioEClima cidade={cidade?.cidade ?? null} uf={cidade?.uf ?? null} />
 
-      <section className="w-full max-w-2xl space-y-3">
-        <h2 className="text-center text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Aniversariantes do dia
-        </h2>
         <ListaAniversariantes nomes={aniversariantes.map((a) => a.nome)} />
-      </section>
+      </div>
     </div>
   );
 }

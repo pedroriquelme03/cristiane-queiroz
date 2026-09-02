@@ -226,6 +226,18 @@ export type MetodoPagamento =
   | "transferencia"
   | "outro";
 
+export type TipoDocumentoCliente = "cpf" | "cnpj";
+
+export interface ClienteConsultoria {
+  id: string;
+  nome: string;
+  tipoDocumento: TipoDocumentoCliente;
+  documento: string;
+  valorMensal: number;
+  ativo: boolean;
+  criadoEm: string;
+}
+
 export interface Plano {
   id: string;
   nome: string;

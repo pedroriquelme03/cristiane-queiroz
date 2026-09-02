@@ -19,12 +19,12 @@ alter table public.colaboradores enable row level security;
 
 create policy "colaboradores: membros leem"
   on public.colaboradores for select
-  using (public.has_empresa_access(empresa_id));
+  using (private.has_empresa_access(empresa_id));
 
 create policy "colaboradores: admin gerencia"
   on public.colaboradores for all
-  using (public.is_admin())
-  with check (public.is_admin());
+  using (private.is_admin())
+  with check (private.is_admin());
 
 comment on table public.colaboradores is
   'Pessoas da empresa; data_nascimento alimenta aniversariantes na tela de início.';
