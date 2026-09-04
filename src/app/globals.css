@@ -132,6 +132,70 @@ body {
   }
 }
 
+/* --------------------------------------------------------------------------
+   Página /bio (link na bio). Tema escuro fixo, independente do next-themes:
+   fundo petróleo com brilho dourado e cartões no padrão "link in bio".
+   -------------------------------------------------------------------------- */
+.bio-root {
+  color-scheme: dark;
+  background:
+    radial-gradient(120% 70% at 50% -8%, rgba(200, 162, 86, 0.16) 0%, transparent 55%),
+    radial-gradient(120% 90% at 50% 0%, #133f49 0%, #0a2b34 42%, #05171d 100%);
+  color: #eef3f4;
+}
+
+/* Anel dourado do avatar, com leve brilho */
+.bio-avatar-ring {
+  background: linear-gradient(135deg, #f0d18d 0%, #b8873b 50%, #f0d18d 100%);
+  padding: 3px;
+  box-shadow:
+    0 0 0 1px rgba(200, 162, 86, 0.35),
+    0 18px 40px -18px rgba(200, 162, 86, 0.6);
+}
+
+/* Cartão de destaque do WhatsApp (verde da marca do app) */
+.bio-card-whats {
+  background: linear-gradient(118deg, #25d366 12%, #128c46 92%);
+  color: #04210f;
+  box-shadow: 0 14px 34px -16px rgba(37, 211, 102, 0.75);
+  transition:
+    transform 200ms ease,
+    box-shadow 200ms ease;
+}
+.bio-card-whats:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 40px -14px rgba(37, 211, 102, 0.85);
+}
+
+/* Cartões de serviço em degradê dourado (identidade CQ) */
+.bio-card-gold {
+  background: linear-gradient(118deg, #e6c47e 8%, #c89442 92%);
+  color: #2f2207;
+  box-shadow: 0 12px 30px -16px rgba(184, 135, 59, 0.7);
+  transition:
+    transform 200ms ease,
+    box-shadow 200ms ease;
+}
+.bio-card-gold:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 38px -14px rgba(184, 135, 59, 0.85);
+}
+
+/* Cartões de link secundários: contorno sobre o fundo escuro */
+.bio-card-outline {
+  border: 1px solid rgba(200, 162, 86, 0.22);
+  background: rgba(255, 255, 255, 0.02);
+  transition:
+    transform 200ms ease,
+    border-color 200ms ease,
+    background-color 200ms ease;
+}
+.bio-card-outline:hover {
+  transform: translateY(-2px);
+  border-color: rgba(200, 162, 86, 0.5);
+  background: rgba(200, 162, 86, 0.07);
+}
+
 /* Organograma (src/app/(app)/empresa/organograma). Arvore com conectores em
    CSS puro, apoiada nos pseudo-elementos das <li> — sem dependencia externa. */
 .organograma ul {

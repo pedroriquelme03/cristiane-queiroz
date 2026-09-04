@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
-const ROTAS_PUBLICAS = ["/login", "/auth", "/recuperar-senha", "/apresentacao"];
+const ROTAS_PUBLICAS = ["/login", "/auth", "/recuperar-senha", "/apresentacao", "/bio"];
 const ROTAS_LIBERADAS_BLOQUEIO = ["/assinatura"];
 
 type NivelPlano = "essencial" | "profissional" | "enterprise";

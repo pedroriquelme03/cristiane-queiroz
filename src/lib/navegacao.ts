@@ -7,6 +7,7 @@ import {
   Gauge,
   LayoutDashboard,
   Library,
+  Link2,
   ListChecks,
   Presentation,
   Stethoscope,
@@ -50,6 +51,7 @@ export const NAVEGACAO: ItemNavegacao[] = [
   { href: "/admin/apresentacao", rotulo: "Apresentações", icone: Presentation, grupo: "admin", papeis: ["admin"] },
   { href: "/admin/empresas", rotulo: "Usuários", icone: Users, grupo: "admin", papeis: ["admin"] },
   { href: "/admin/planos", rotulo: "Planos", icone: ListChecks, grupo: "admin", papeis: ["admin"] },
+  { href: "/admin/bio", rotulo: "Link na bio", icone: Link2, grupo: "admin", papeis: ["admin"] },
 ];
 
 export const ROTULOS_GRUPO: Record<ItemNavegacao["grupo"], string> = {
