@@ -28,8 +28,8 @@ export default async function CadastroPlanoDeContasPage({
   return (
     <Card>
       <CardHeader
-        titulo="Plano de contas"
-        descricao="Classificações usadas em lançamentos, contas a pagar/receber e DRE."
+        titulo="Classificações"
+        descricao="Cada classificação vira uma linha do DRE gerencial. Também alimenta o campo Classificação em lançamentos e contas a pagar/receber."
         acao={
           podeEditar ? (
             <div className="flex flex-wrap items-center gap-2">

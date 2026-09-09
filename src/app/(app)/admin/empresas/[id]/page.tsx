@@ -7,6 +7,7 @@ import { GerenciarAcessos } from "@/components/admin/gerenciar-acessos";
 import { VincularPlano } from "@/components/admin/vincular-plano";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { getPlanos } from "@/lib/dados-assinatura";
+import { getSegmentos } from "@/lib/dados-segmentos";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function EditarEmpresaPage({
@@ -19,11 +20,13 @@ export default async function EditarEmpresaPage({
     { data: membros, error: membrosError },
     { data: assinatura, error: assinaturaError },
     planos,
+    segmentos,
   ] = await Promise.all([
     supabase.from("empresas").select("*").eq("id", id).single(),
     supabase.from("empresa_membros").select("user_id, papel").eq("empresa_id", id),
     supabase.from("assinaturas").select("id").eq("empresa_id", id).maybeSingle(),
     getPlanos(),
+    getSegmentos(),
   ]);
 
   if (error || !empresa) notFound();
@@ -69,7 +72,7 @@ export default async function EditarEmpresaPage({
           acao={<BotaoExcluirUsuario action={excluirUsuarioPorId} />}
         />
         <CardBody>
-          <FormEditarEmpresa empresa={empresa} />
+          <FormEditarEmpresa empresa={empresa} segmentos={segmentos} />
         </CardBody>
       </Card>
       <Card>

@@ -4,8 +4,8 @@ import { Badge } from "@/components/ui/badge";
 import { CabecalhoPagina } from "@/components/ui/cabecalho-pagina";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { getEmpresa, getIndicadores } from "@/lib/dados";
+import { rotuloSegmento } from "@/lib/dados-segmentos";
 import { percentual, valorIndicador } from "@/lib/format";
-import { ROTULO_SEGMENTO } from "@/lib/segmentos";
 import { getSessao } from "@/lib/sessao";
 import type { Indicador } from "@/lib/types";
 
@@ -42,7 +42,7 @@ export default async function IndicadoresPage({
     getIndicadores(empresaId),
     getEmpresa(empresaId),
   ]);
-  const rotuloSegmento = ROTULO_SEGMENTO[empresa.segmento];
+  const rotuloDoSegmento = rotuloSegmento(empresa.segmento);
   const gerais = indicadores.filter((indicador) => !indicador.personalizado && indicador.segmento === "geral");
   const segmento = empresa.segmento === "geral"
     ? []
@@ -53,7 +53,7 @@ export default async function IndicadoresPage({
     <>
       <CabecalhoPagina
         titulo="Indicadores"
-        descricao={`${indicadores.length} indicadores para ${rotuloSegmento}: ${gerais.length} gerais, ${segmento.length} do segmento e ${personalizados.length} personalizados`}
+        descricao={`${indicadores.length} indicadores para ${rotuloDoSegmento}: ${gerais.length} gerais, ${segmento.length} do segmento e ${personalizados.length} personalizados`}
         acao={<SeletorEmpresaAdmin />}
       />
 

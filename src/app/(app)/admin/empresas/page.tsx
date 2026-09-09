@@ -2,22 +2,9 @@ import Link from "next/link";
 import { Building2, Plus, Tag, Users } from "lucide-react";
 
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { rotuloSegmento } from "@/lib/dados-segmentos";
 import { cnpj as formatarCnpj } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
-
-const NOME_SEGMENTO: Record<string, string> = {
-  alimentacao: "Alimentação",
-  comercio: "Comércio",
-  geral: "Geral",
-  hotelaria: "Hotelaria",
-  industria: "Indústria",
-  servicos: "Serviços",
-};
-
-function nomeSegmento(segmento: string | null) {
-  if (!segmento) return "Não informado";
-  return NOME_SEGMENTO[segmento] ?? segmento;
-}
 
 export default async function EmpresasPage() {
   const supabase = await createClient();
@@ -98,7 +85,7 @@ export default async function EmpresasPage() {
                       <td className="px-3 py-3 font-mono text-muted-foreground">
                         {empresa.cnpj ? formatarCnpj(empresa.cnpj) : "—"}
                       </td>
-                      <td className="px-3 py-3">{nomeSegmento(empresa.segmento)}</td>
+                      <td className="px-3 py-3">{rotuloSegmento(empresa.segmento)}</td>
                       <td className="px-3 py-3">
                         {(emailsPorEmpresa.get(empresa.id) ?? []).length ? (
                           <div className="space-y-0.5">

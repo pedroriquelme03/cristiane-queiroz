@@ -240,17 +240,17 @@ export function DialogoTitulo({
                   contasUteis.length === 0
                     ? undefined
                     : ehPagar
-                      ? "Contas de despesa, custo e investimento"
-                      : "Contas de receita"
+                      ? "Vem de Cadastros → Classificações (despesas, custos e investimentos)"
+                      : "Vem de Cadastros → Classificações (contas do tipo receita)"
                 }
               />
               {contasUteis.length === 0 ? (
                 <p className="text-xs text-warning">
-                  Nenhuma classificação cadastrada.{" "}
+                  Nenhuma classificação de {ehPagar ? "despesa" : "receita"} cadastrada.{" "}
                   <Link href={hrefPlano} className="font-medium text-brand hover:underline">
-                    Cadastrar no Plano de contas
+                    Cadastrar em Cadastros → Classificações
                   </Link>
-                  .
+                  {" "}ou use o botão Nova classificação nesta tela.
                 </p>
               ) : null}
             </div>

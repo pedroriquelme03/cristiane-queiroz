@@ -1,3 +1,4 @@
+import { DialogoNovaCategoria } from "@/components/financeiro/dialogo-categoria-fixa";
 import { DialogoTitulo } from "@/components/financeiro/dialogo-titulo";
 import { TabelaContasFixas } from "@/components/financeiro/tabela-contas-fixas";
 import { TabelaTitulos } from "@/components/financeiro/tabela-titulos";
@@ -40,6 +41,7 @@ export default async function ContasAReceberPage({
   const soma = (lista: typeof titulos) =>
     lista.reduce((s, t) => s + t.valor - t.valorPago, 0);
   const somaFixos = fixos.reduce((s, g) => s + g.saldo, 0);
+  const totalMensalFixos = fixos.reduce((s, g) => s + g.valorMensal, 0);
 
   const totalAberto = soma(abertos) + soma(vencidos) + somaFixos;
   const taxaInadimplencia = totalAberto > 0 ? (soma(vencidos) / totalAberto) * 100 : 0;
@@ -64,9 +66,9 @@ export default async function ContasAReceberPage({
           nota={`${vencidos.length} títulos`}
         />
         <Kpi
-          rotulo="Recebimentos fixos"
-          valor={moeda(somaFixos)}
-          nota={`${fixos.length} contrato${fixos.length === 1 ? "" : "s"}`}
+          rotulo="Total mensal (fixos)"
+          valor={moeda(totalMensalFixos)}
+          nota={`${fixos.length} contrato${fixos.length === 1 ? "" : "s"} · soma das parcelas`}
         />
         <Kpi
           rotulo="Inadimplência"
@@ -82,13 +84,16 @@ export default async function ContasAReceberPage({
           descricao="Uma linha por cadastro — parcelas mensais agrupadas com meses restantes a receber."
           acao={
             podeEditar ? (
-              <DialogoTitulo
-                tipo="receber"
-                contas={contas}
-                empresaId={empresaIdAtiva}
-                fixaPadrao
-                clientesConsultoria={opcoesClientes}
-              />
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <DialogoNovaCategoria empresaId={empresaIdAtiva} tipoPadrao="receita" />
+                <DialogoTitulo
+                  tipo="receber"
+                  contas={contas}
+                  empresaId={empresaIdAtiva}
+                  fixaPadrao
+                  clientesConsultoria={opcoesClientes}
+                />
+              </div>
             ) : null
           }
         />

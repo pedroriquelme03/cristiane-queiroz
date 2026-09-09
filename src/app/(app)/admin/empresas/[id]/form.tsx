@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { SeletorSegmento } from "@/components/admin/seletor-segmento";
+import type { SegmentoOpcao } from "@/lib/dados-segmentos";
 import { createClient as createBrowserClient } from "@/lib/supabase/client";
 
 interface EmpresaForm {
@@ -14,7 +15,13 @@ interface EmpresaForm {
   segmento: string;
 }
 
-export function FormEditarEmpresa({ empresa }: { empresa: EmpresaForm }) {
+export function FormEditarEmpresa({
+  empresa,
+  segmentos,
+}: {
+  empresa: EmpresaForm;
+  segmentos: SegmentoOpcao[];
+}) {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -103,7 +110,7 @@ export function FormEditarEmpresa({ empresa }: { empresa: EmpresaForm }) {
           className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-brand focus:outline-none"
         />
       </div>
-      <SeletorSegmento valorInicial={empresa.segmento} />
+      <SeletorSegmento valorInicial={empresa.segmento} segmentos={segmentos} />
 
       {error && <div className="p-3 bg-red-50 text-red-700 rounded-lg">{error}</div>}
 

@@ -1,5 +1,5 @@
 import { PainelReceitas } from "@/components/financeiro/painel-receitas";
-import { getCompetenciaAtual, getDre, getLancamentos, intervaloDoMes } from "@/lib/dados";
+import { getCompetenciaAtual, getDre, getMovimentosDre, intervaloDoMes } from "@/lib/dados";
 import { competenciaExtenso } from "@/lib/format";
 
 export default async function ReceitasPage({ searchParams }: { searchParams: Promise<{ empresa?: string | string[] }> }) {
@@ -7,7 +7,16 @@ export default async function ReceitasPage({ searchParams }: { searchParams: Pro
   const empresaId = typeof empresa === "string" ? empresa : undefined;
   const competencia = await getCompetenciaAtual();
   const { inicio, fim } = intervaloDoMes(competencia);
-  const [linhas, lancamentos] = await Promise.all([getDre(inicio, fim, empresaId), getLancamentos(inicio, fim, empresaId)]);
+  const [linhas, movimentos] = await Promise.all([
+    getDre(inicio, fim, empresaId),
+    getMovimentosDre(inicio, fim, empresaId),
+  ]);
 
-  return <PainelReceitas linhas={linhas} lancamentos={lancamentos} competencia={competenciaExtenso(competencia)} />;
+  return (
+    <PainelReceitas
+      linhas={linhas}
+      movimentos={movimentos.filter((item) => item.tipo === "entrada")}
+      competencia={competenciaExtenso(competencia)}
+    />
+  );
 }

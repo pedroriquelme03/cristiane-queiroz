@@ -1,7 +1,7 @@
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Kpi } from "@/components/ui/kpi";
 import { RegistrosGrupoInterativos } from "@/components/financeiro/dre-interativa";
-import { getCompetenciaAtual, getDre, getLancamentos, intervaloDoMes } from "@/lib/dados";
+import { getCompetenciaAtual, getDre, getMovimentosDre, intervaloDoMes } from "@/lib/dados";
 import { competenciaExtenso, moeda, percentual } from "@/lib/format";
 import type { GrupoDre } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -46,13 +46,15 @@ const ESTRUTURA: (
     ],
   },
   { tipo: "grupo", grupo: "investimento" },
+  { tipo: "grupo", grupo: "nao_operacional" },
+  { tipo: "grupo", grupo: "outros" },
   {
     tipo: "subtotal",
     rotulo: "= Resultado do período",
     ate: [
       "receita_bruta", "deducoes", "custo_variavel", "despesa_pessoal",
       "despesa_administrativa", "despesa_comercial", "despesa_financeira",
-      "investimento", "nao_operacional",
+      "investimento", "nao_operacional", "outros",
     ],
   },
 ];
@@ -66,13 +68,13 @@ export default async function DrePage({
   const empresaId = typeof empresa === "string" ? empresa : undefined;
   const competencia = await getCompetenciaAtual();
   const { inicio, fim } = intervaloDoMes(competencia);
-  const [linhas, lancamentos] = await Promise.all([
+  const [linhas, movimentos] = await Promise.all([
     getDre(inicio, fim, empresaId),
-    getLancamentos(inicio, fim, empresaId),
+    getMovimentosDre(inicio, fim, empresaId),
   ]);
 
   const porGrupo = (grupo: GrupoDre) =>
-    linhas.filter((l) => l.grupoDre === grupo && (l.realizado !== 0 || l.previsto !== 0));
+    linhas.filter((l) => l.grupoDre === grupo);
 
   const somar = (grupos: GrupoDre[], campo: "realizado" | "previsto") =>
     linhas
@@ -119,7 +121,7 @@ export default async function DrePage({
       <Card>
         <CardHeader
           titulo="DRE gerencial"
-          descricao={`Realizado x orçado de ${competenciaExtenso(competencia)}. AV = participação na receita bruta.`}
+          descricao={`Linhas = Classificações de Cadastros. Realizado x orçado de ${competenciaExtenso(competencia)}. Realizado pela data de emissão. AV = participação na receita bruta.`}
         />
         <CardBody className="px-0 py-0">
           <div className="overflow-x-auto">
@@ -134,6 +136,13 @@ export default async function DrePage({
                 </tr>
               </thead>
               <tbody>
+                {linhas.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-5 py-10 text-center text-sm text-muted-foreground">
+                      Nenhuma classificação cadastrada. Cadastre em Cadastros → Classificações para montar as linhas do DRE.
+                    </td>
+                  </tr>
+                ) : null}
                 {ESTRUTURA.map((bloco, i) => {
                   if (bloco.tipo === "subtotal") {
                     const real = somar(bloco.ate, "realizado");
@@ -175,7 +184,7 @@ export default async function DrePage({
                       key={bloco.grupo}
                       titulo={NOME_GRUPO[bloco.grupo]}
                       contas={contas}
-                      lancamentos={lancamentos}
+                      movimentos={movimentos}
                       receitaBruta={receitaBruta}
                     />
                   );

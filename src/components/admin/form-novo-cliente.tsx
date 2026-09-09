@@ -7,17 +7,24 @@ import { consultarCnpj } from "@/app/(app)/admin/empresas/consultar-cnpj";
 import { criarEmpresa } from "@/app/(app)/admin/empresas/nova/action";
 import { SeletorSegmento } from "@/components/admin/seletor-segmento";
 import { CampoSelect, CampoTexto } from "@/components/ui/campo";
+import type { SegmentoOpcao } from "@/lib/dados-segmentos";
 import { moeda } from "@/lib/format";
-import type { Plano, Segmento } from "@/lib/types";
+import type { Plano } from "@/lib/types";
 
-export function FormNovoCliente({ planos }: { planos: Plano[] }) {
+export function FormNovoCliente({
+  planos,
+  segmentos,
+}: {
+  planos: Plano[];
+  segmentos: SegmentoOpcao[];
+}) {
   const [estado, acao, pendente] = useActionState(criarEmpresa, { error: "" });
   const [cnpj, setCnpj] = useState("");
   const [planoId, setPlanoId] = useState(() => planos[0]?.id ?? "");
   const [trialDias, setTrialDias] = useState(() => String(planos[0]?.trialDias ?? 30));
   const [razaoSocial, setRazaoSocial] = useState("");
   const [nomeFantasia, setNomeFantasia] = useState("");
-  const [segmento, setSegmento] = useState<Exclude<Segmento, "geral">>("servicos");
+  const [segmento, setSegmento] = useState("servicos");
   const [consultaErro, setConsultaErro] = useState<string | null>(null);
   const [consultaOk, setConsultaOk] = useState<string | null>(null);
   const [consultando, startConsulta] = useTransition();
@@ -112,7 +119,7 @@ export function FormNovoCliente({ planos }: { planos: Plano[] }) {
             value={nomeFantasia}
             onChange={(evento) => setNomeFantasia(evento.currentTarget.value)}
           />
-          <SeletorSegmento key={segmento} valorInicial={segmento} />
+          <SeletorSegmento key={segmento} valorInicial={segmento} segmentos={segmentos} />
         </div>
       </div>
 

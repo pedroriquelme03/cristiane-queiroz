@@ -1,6 +1,8 @@
 "use server";
 
 import { redirect } from "next/navigation";
+
+import { segmentoExiste } from "@/app/(app)/admin/segmentos/acoes";
 import { getSessao } from "@/lib/sessao";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
@@ -14,7 +16,7 @@ export async function criarEmpresa(
   const razao_social = formData.get("razao_social") as string;
   const nome_fantasia = formData.get("nome_fantasia") as string;
   const cnpj = String(formData.get("cnpj") ?? "").replace(/\D/g, "");
-  const segmento = formData.get("segmento") as string;
+  const segmento = String(formData.get("segmento") ?? "").trim();
   const email = formData.get("email") as string;
   const senha = formData.get("senha") as string;
   const planoId = String(formData.get("planoId") ?? "");
@@ -25,6 +27,9 @@ export async function criarEmpresa(
   // Validação
   if (!razao_social || !nome_fantasia || !cnpj || !segmento || !email || !senha || !planoId || !ciclo) {
     return { error: "Todos os campos são obrigatórios." };
+  }
+  if (!(await segmentoExiste(segmento))) {
+    return { error: "Segmento inválido. Cadastre o segmento antes de continuar." };
   }
   if (!/^\d{14}$/.test(cnpj)) {
     return { error: "O CNPJ deve conter exatamente 14 números." };

@@ -1,3 +1,5 @@
+import { DialogoNovaCategoria } from "@/components/financeiro/dialogo-categoria-fixa";
+import { DialogoParcelaCartao } from "@/components/financeiro/dialogo-parcela-cartao";
 import { DialogoTitulo } from "@/components/financeiro/dialogo-titulo";
 import { TabelaContasFixas } from "@/components/financeiro/tabela-contas-fixas";
 import { TabelaTitulos } from "@/components/financeiro/tabela-titulos";
@@ -33,9 +35,15 @@ export default async function ContasAPagarPage({
   const soma = (lista: typeof titulos) =>
     lista.reduce((s, t) => s + t.valor - t.valorPago, 0);
   const somaFixas = fixas.reduce((s, g) => s + g.saldo, 0);
+  const totalMensalFixas = fixas.reduce((s, g) => s + g.valorMensal, 0);
 
-  // Concentração de vencimentos: quanto vence nos próximos 7 dias
-  const emSete = abertos.filter((t) => diasAte(t.vencimento) <= 7);
+  // Inclui avulsos e parcelas de contas fixas com vencimento de hoje até 7 dias.
+  const emSete = titulos.filter((t) => {
+    const situacao = statusEfetivo(t);
+    if (!["aberto", "parcial"].includes(situacao)) return false;
+    const dias = diasAte(t.vencimento);
+    return dias >= 0 && dias <= 7;
+  });
 
   return (
     <>
@@ -54,9 +62,9 @@ export default async function ContasAPagarPage({
           nota={`${emSete.length} títulos`}
         />
         <Kpi
-          rotulo="Contas fixas em aberto"
-          valor={moeda(somaFixas)}
-          nota={`${fixas.length} conta${fixas.length === 1 ? "" : "s"}`}
+          rotulo="Total mensal (fixas)"
+          valor={moeda(totalMensalFixas)}
+          nota={`${fixas.length} conta${fixas.length === 1 ? "" : "s"} · soma das parcelas`}
         />
       </div>
 
@@ -66,7 +74,11 @@ export default async function ContasAPagarPage({
           descricao="Uma linha por cadastro — parcelas mensais agrupadas com meses restantes a pagar."
           acao={
             podeEditar ? (
-              <DialogoTitulo tipo="pagar" contas={contas} empresaId={empresaIdAtiva} fixaPadrao />
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <DialogoNovaCategoria empresaId={empresaIdAtiva} tipoPadrao="despesa" />
+                <DialogoParcelaCartao contas={contas} empresaId={empresaIdAtiva} />
+                <DialogoTitulo tipo="pagar" contas={contas} empresaId={empresaIdAtiva} fixaPadrao />
+              </div>
             ) : null
           }
         />

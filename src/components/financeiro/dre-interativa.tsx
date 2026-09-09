@@ -4,18 +4,18 @@ import { useState } from "react";
 import { ChevronRight } from "lucide-react";
 
 import { data as formatarData, moeda, percentual } from "@/lib/format";
-import type { Lancamento, LinhaDre } from "@/lib/types";
+import type { LinhaDre, MovimentoDre } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export function RegistrosGrupoInterativos({
   titulo,
   contas,
-  lancamentos,
+  movimentos,
   receitaBruta,
 }: {
   titulo: string;
   contas: LinhaDre[];
-  lancamentos: Lancamento[];
+  movimentos: MovimentoDre[];
   receitaBruta: number;
 }) {
   const [abertas, setAbertas] = useState<Set<string>>(new Set());
@@ -23,7 +23,7 @@ export function RegistrosGrupoInterativos({
   const totalPrev = contas.reduce((s, c) => s + c.previsto, 0);
 
   const movimentosDaConta = (planoContaId: string) =>
-    lancamentos.filter((lancamento) => lancamento.planoContaId === planoContaId);
+    movimentos.filter((movimento) => movimento.planoContaId === planoContaId);
 
   const av = (valor: number) =>
     receitaBruta !== 0 ? (Math.abs(valor) / receitaBruta) * 100 : 0;
@@ -62,8 +62,8 @@ export function RegistrosGrupoInterativos({
 
       {contas.map((conta) => {
         const desvio = conta.realizado - conta.previsto;
-        const movimentos = movimentosDaConta(conta.planoContaId);
-        const expansivel = movimentos.length > 0;
+        const itens = movimentosDaConta(conta.planoContaId);
+        const expansivel = itens.length > 0;
         const aberta = abertas.has(conta.planoContaId);
 
         return (
@@ -74,7 +74,7 @@ export function RegistrosGrupoInterativos({
             av={av(conta.realizado)}
             expansivel={expansivel}
             aberta={aberta}
-            movimentos={movimentos}
+            movimentos={itens}
             onAlternar={() => alternar(conta.planoContaId)}
           />
         );
@@ -97,7 +97,7 @@ function ContaComDetalhe({
   av: number;
   expansivel: boolean;
   aberta: boolean;
-  movimentos: Lancamento[];
+  movimentos: MovimentoDre[];
   onAlternar: () => void;
 }) {
   return (
@@ -163,7 +163,9 @@ function ContaComDetalhe({
                 <span>{movimento.descricao}</span>
                 {movimento.contraparte || movimento.origem ? (
                   <span className="mt-0.5 block text-xs text-muted-foreground">
-                    {movimento.contraparte ?? movimento.origem}
+                    {[movimento.contraparte, movimento.origem === "titulo" ? "emissão" : null]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </span>
                 ) : null}
               </td>

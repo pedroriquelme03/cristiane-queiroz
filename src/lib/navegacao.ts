@@ -110,6 +110,6 @@ export const ABAS_CADASTROS = [
   { href: "/cadastros/unidades", rotulo: "Unidades" },
   { href: "/cadastros/areas-e-cargos", rotulo: "Áreas e cargos" },
   { href: "/cadastros/colaboradores", rotulo: "Colaboradores" },
-  { href: "/cadastros/plano-de-contas", rotulo: "Plano de contas" },
+  { href: "/cadastros/plano-de-contas", rotulo: "Classificações" },
   { href: "/cadastros/contas-bancarias", rotulo: "Contas bancárias" },
 ];

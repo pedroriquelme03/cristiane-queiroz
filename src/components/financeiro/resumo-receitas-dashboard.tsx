@@ -5,18 +5,18 @@ import { useMemo, useState } from "react";
 import { ArrowRight, Layers3 } from "lucide-react";
 
 import { moeda, percentual } from "@/lib/format";
-import type { Lancamento, LinhaDre } from "@/lib/types";
+import type { LinhaDre, MovimentoDre } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const CORES = ["bg-brand", "bg-positive", "bg-[#7c7297]", "bg-warning", "bg-[#587c9c]"];
 
 export function ResumoReceitasDashboard({
   linhas,
-  lancamentos,
+  movimentos,
   href,
 }: {
   linhas: LinhaDre[];
-  lancamentos: Lancamento[];
+  movimentos: MovimentoDre[];
   href: string;
 }) {
   const fontes = useMemo(() => linhas
@@ -25,9 +25,9 @@ export function ResumoReceitasDashboard({
       id: linha.planoContaId,
       nome: linha.conta,
       valor: linha.realizado,
-      lancamentos: lancamentos.filter((lancamento) => lancamento.planoContaId === linha.planoContaId),
+      movimentos: movimentos.filter((movimento) => movimento.planoContaId === linha.planoContaId),
     }))
-    .sort((a, b) => b.valor - a.valor), [lancamentos, linhas]);
+    .sort((a, b) => b.valor - a.valor), [movimentos, linhas]);
   const [fonteId, setFonteId] = useState<string | null>(null);
   const fonteAtiva = fontes.find((fonte) => fonte.id === fonteId) ?? fontes[0];
   const total = fontes.reduce((soma, fonte) => soma + fonte.valor, 0);
@@ -62,7 +62,7 @@ export function ResumoReceitasDashboard({
             <p className="text-xs font-medium text-brand">Fonte selecionada</p>
             <p className="mt-1 text-base font-semibold">{fonteAtiva.nome}</p>
             <p className="mt-2 text-2xl font-semibold tabular">{moeda(fonteAtiva.valor)}</p>
-            <p className="mt-1 text-xs text-muted-foreground">{percentual((fonteAtiva.valor / total) * 100, 1)} da receita mensal · {fonteAtiva.lancamentos.length} lançamento(s)</p>
+            <p className="mt-1 text-xs text-muted-foreground">{percentual((fonteAtiva.valor / total) * 100, 1)} da receita mensal · {fonteAtiva.movimentos.length} lançamento(s)</p>
             <Link href={href} className="mt-4 inline-flex items-center gap-1 text-xs font-medium text-brand hover:underline">Ver composição completa <ArrowRight className="size-3.5" aria-hidden /></Link>
           </aside>
         ) : null}

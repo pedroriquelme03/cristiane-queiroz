@@ -5,17 +5,9 @@ import { SeletorCliente } from "./seletor-cliente";
 import DashboardPage from "@/app/(app)/page";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Kpi } from "@/components/ui/kpi";
+import { rotuloSegmento } from "@/lib/dados-segmentos";
 import { cnpj as formatarCnpj } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
-
-const NOME_SEGMENTO: Record<string, string> = {
-  alimentacao: "Alimentação",
-  comercio: "Comércio",
-  geral: "Geral",
-  hotelaria: "Hotelaria",
-  industria: "Indústria",
-  servicos: "Serviços",
-};
 
 export async function ConteudoVisaoCliente({
   searchParams,
@@ -84,7 +76,7 @@ export async function ConteudoVisaoCliente({
             />
             <Kpi
               rotulo="Segmento"
-              valor={NOME_SEGMENTO[empresa.segmento] ?? empresa.segmento ?? "Não informado"}
+              valor={rotuloSegmento(empresa.segmento)}
               icone={<Landmark className="size-4" />}
             />
             <Kpi

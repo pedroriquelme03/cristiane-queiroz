@@ -8,6 +8,11 @@ import {
   type EstadoFormulario,
 } from "@/app/(app)/financeiro/acoes";
 import {
+  DialogoEditarCategoriaFixa,
+  nomeCategoria,
+} from "@/components/financeiro/dialogo-categoria-fixa";
+import { DialogoMesesRestantes } from "@/components/financeiro/dialogo-meses-restantes";
+import {
   DialogoBaixaTitulo,
   DialogoTitulo,
 } from "@/components/financeiro/dialogo-titulo";
@@ -103,6 +108,7 @@ export function TabelaContasFixas({
   const rotuloItem = tipo === "pagar" ? "conta fixa" : "recebimento fixo";
   const vazio =
     tipo === "pagar" ? "Nenhuma conta fixa em aberto." : "Nenhum recebimento fixo em aberto.";
+  const totalMensal = grupos.reduce((soma, grupo) => soma + grupo.valorMensal, 0);
 
   return (
     <div className="overflow-x-auto">
@@ -111,6 +117,9 @@ export function TabelaContasFixas({
           <tr className="border-b border-border text-xs text-muted-foreground">
             <th scope="col" className="px-5 py-2.5 text-left font-medium">
               {rotuloContraparte}
+            </th>
+            <th scope="col" className="px-3 py-2.5 text-left font-medium">
+              Categoria
             </th>
             <th scope="col" className="px-3 py-2.5 text-left font-medium">
               Documento
@@ -149,6 +158,9 @@ export function TabelaContasFixas({
                   </span>
                 </th>
                 <td className="px-3 py-2.5 text-muted-foreground">
+                  {nomeCategoria(grupo.titulo.planoContaId, contas)}
+                </td>
+                <td className="px-3 py-2.5 text-muted-foreground">
                   {grupo.titulo.documento ?? "—"}
                 </td>
                 <td className="tabular px-3 py-2.5">{moeda(grupo.valorMensal)}</td>
@@ -159,10 +171,16 @@ export function TabelaContasFixas({
                   </span>
                 </td>
                 <td className="px-3 py-2.5">
-                  <span className="tabular font-medium">{grupo.mesesRestantes}</span>
-                  <span className="text-muted-foreground">
-                    {grupo.mesesRestantes === 1 ? " mês" : " meses"}
-                  </span>
+                  {podeEditar && empresaId ? (
+                    <DialogoMesesRestantes grupo={grupo} empresaId={empresaId} />
+                  ) : (
+                    <>
+                      <span className="tabular font-medium">{grupo.mesesRestantes}</span>
+                      <span className="text-muted-foreground">
+                        {grupo.mesesRestantes === 1 ? " mês" : " meses"}
+                      </span>
+                    </>
+                  )}
                 </td>
                 <td className="px-3 py-2.5">
                   <Badge tom={TOM[situacao]}>{ROTULO[situacao]}</Badge>
@@ -176,6 +194,12 @@ export function TabelaContasFixas({
                       {grupo.titulo.status !== "pago" && grupo.titulo.status !== "cancelado" ? (
                         <DialogoBaixaTitulo titulo={grupo.titulo} empresaId={empresaId} />
                       ) : null}
+                      <DialogoEditarCategoriaFixa
+                        grupo={grupo}
+                        contas={contas}
+                        empresaId={empresaId}
+                        tipo={tipo}
+                      />
                       <DialogoTitulo
                         tipo={tipo}
                         contas={contas}
@@ -192,13 +216,25 @@ export function TabelaContasFixas({
           {grupos.length === 0 ? (
             <tr>
               <td
-                colSpan={podeEditar ? 8 : 7}
+                colSpan={podeEditar ? 9 : 8}
                 className="px-5 py-8 text-center text-sm text-muted-foreground"
               >
                 {vazio}
               </td>
             </tr>
-          ) : null}
+          ) : (
+            <tr className="border-t border-border bg-surface-muted/40">
+              <td colSpan={3} className="px-5 py-3 text-sm font-medium">
+                Total mensal
+              </td>
+              <td className="tabular px-3 py-3 text-sm font-semibold">
+                {moeda(totalMensal)}
+              </td>
+              <td colSpan={podeEditar ? 5 : 4} className="px-3 py-3 text-xs text-muted-foreground">
+                Soma do valor das parcelas de todas as contas fixas
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
     </div>

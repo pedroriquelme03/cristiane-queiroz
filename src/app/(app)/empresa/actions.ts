@@ -3,13 +3,28 @@
 import { revalidatePath } from "next/cache";
 
 import { parseData } from "@/lib/importacao/parsers";
+import { SEGMENTOS_CADASTRO } from "@/lib/segmentos";
 import { getSessao } from "@/lib/sessao";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import type { RegimeTributario, Segmento } from "@/lib/types";
+import type { RegimeTributario } from "@/lib/types";
 
-const SEGMENTOS: Segmento[] = ["geral", "hotelaria", "comercio", "servicos", "industria", "alimentacao"];
 const REGIMES: RegimeTributario[] = ["simples", "presumido", "real", "mei"];
 const TIPOS_UNIDADE = ["matriz", "filial", "cd", "loja"];
+const SEGMENTOS_PADRAO = new Set([
+  "geral",
+  ...SEGMENTOS_CADASTRO.map((item) => item.valor),
+]);
+
+async function segmentoValido(valor: string) {
+  if (SEGMENTOS_PADRAO.has(valor)) return true;
+  const { data } = await supabaseAdmin
+    .from("segmentos")
+    .select("valor")
+    .eq("valor", valor)
+    .eq("ativo", true)
+    .maybeSingle();
+  return Boolean(data);
+}
 
 export interface EstadoFormularioEstrutura {
   ok?: boolean;
@@ -66,7 +81,7 @@ export async function salvarCadastroEmpresa(empresaId: string, formData: FormDat
   const razaoSocial = String(formData.get("razao_social") ?? "").trim();
   const nomeFantasia = String(formData.get("nome_fantasia") ?? "").trim();
   const cnpj = String(formData.get("cnpj") ?? "").replace(/\D/g, "");
-  const segmento = String(formData.get("segmento") ?? "geral") as Segmento;
+  const segmento = String(formData.get("segmento") ?? "geral").trim();
   const regimeTributario = String(formData.get("regime_tributario") ?? "simples") as RegimeTributario;
   const dataAberturaBruta = String(formData.get("data_abertura") ?? "").trim();
   const dataAbertura = dataAberturaBruta ? parseData(dataAberturaBruta) : null;
@@ -77,7 +92,7 @@ export async function salvarCadastroEmpresa(empresaId: string, formData: FormDat
 
   if (!razaoSocial || !nomeFantasia) throw new Error("Informe razão social e nome fantasia.");
   if (!/^\d{14}$/.test(cnpj)) throw new Error("O CNPJ deve conter exatamente 14 números.");
-  if (!SEGMENTOS.includes(segmento)) throw new Error("Segmento inválido.");
+  if (!(await segmentoValido(segmento))) throw new Error("Segmento inválido.");
   if (!REGIMES.includes(regimeTributario)) throw new Error("Regime tributário inválido.");
   if (!Number.isInteger(qtdFuncionariosInformada) || qtdFuncionariosInformada < 0) {
     throw new Error("Informe uma quantidade de funcionários válida.");

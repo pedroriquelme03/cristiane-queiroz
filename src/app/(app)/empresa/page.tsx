@@ -2,23 +2,16 @@ import { Save } from "lucide-react";
 
 import { salvarCadastroEmpresa } from "./actions";
 import { SeletorCliente } from "@/app/(app)/admin/visao-cliente/seletor-cliente";
+import { SeletorSegmento } from "@/components/admin/seletor-segmento";
 import { EditarCadastroModal } from "@/components/empresa/editar-cadastro-modal";
 import { CampoSelect, CampoTexto } from "@/components/ui/campo";
 import { CampoData } from "@/components/ui/campo-data";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { getSegmentos, rotuloSegmento } from "@/lib/dados-segmentos";
 import { cnpj as formatarCnpj, data as formatarData } from "@/lib/format";
 import { getSessao } from "@/lib/sessao";
 import { createClient } from "@/lib/supabase/server";
-import type { RegimeTributario, Segmento } from "@/lib/types";
-
-const NOME_SEGMENTO: Record<Segmento, string> = {
-  geral: "Geral",
-  hotelaria: "Hotelaria",
-  comercio: "Comércio",
-  servicos: "Serviços",
-  industria: "Indústria",
-  alimentacao: "Alimentação",
-};
+import type { RegimeTributario } from "@/lib/types";
 
 const NOME_REGIME: Record<RegimeTributario, string> = {
   simples: "Simples Nacional",
@@ -27,25 +20,12 @@ const NOME_REGIME: Record<RegimeTributario, string> = {
   mei: "MEI",
 };
 
-const OPCOES_SEGMENTO = [
-  { valor: "geral", rotulo: "Geral" },
-  { valor: "hotelaria", rotulo: "Hotelaria" },
-  { valor: "comercio", rotulo: "Comércio" },
-  { valor: "servicos", rotulo: "Serviços" },
-  { valor: "industria", rotulo: "Indústria" },
-  { valor: "alimentacao", rotulo: "Alimentação" },
-];
-
 const OPCOES_REGIME = [
   { valor: "simples", rotulo: "Simples Nacional" },
   { valor: "presumido", rotulo: "Lucro Presumido" },
   { valor: "real", rotulo: "Lucro Real" },
   { valor: "mei", rotulo: "MEI" },
 ];
-
-function nomeSegmento(valor: string | null) {
-  return valor ? NOME_SEGMENTO[valor as Segmento] ?? valor : "-";
-}
 
 function nomeRegime(valor: string | null) {
   return valor ? NOME_REGIME[valor as RegimeTributario] ?? valor : "-";
@@ -54,7 +34,7 @@ function nomeRegime(valor: string | null) {
 export default async function EmpresaPage({
   searchParams,
 }: PageProps<"/empresa">) {
-  const sessao = await getSessao();
+  const [sessao, segmentos] = await Promise.all([getSessao(), getSegmentos()]);
   const supabase = await createClient();
   const { empresa: empresaParam } = await searchParams;
   const empresaSelecionadaId =
@@ -108,14 +88,20 @@ export default async function EmpresaPage({
           <CardHeader
             titulo="Dados cadastrados"
             descricao="Informações usadas nos relatórios e na identificação da empresa."
-            acao={<EditarCadastro empresa={empresa} />}
+            acao={<EditarCadastro empresa={empresa} segmentos={segmentos} />}
           />
           <CardBody>
             <dl className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <CampoResumo rotulo="Razão Social" valor={empresa.razao_social} />
               <CampoResumo rotulo="Nome Fantasia" valor={empresa.nome_fantasia ?? "-"} />
               <CampoResumo rotulo="CNPJ" valor={empresa.cnpj ? formatarCnpj(empresa.cnpj) : "-"} monoespacado />
-              <CampoResumo rotulo="Segmento" valor={nomeSegmento(empresa.segmento)} />
+              <CampoResumo
+                rotulo="Segmento"
+                valor={
+                  segmentos.find((item) => item.valor === empresa.segmento)?.rotulo ??
+                  rotuloSegmento(empresa.segmento)
+                }
+              />
               <CampoResumo rotulo="Regime Tributário" valor={nomeRegime(empresa.regime_tributario)} />
               <CampoResumo rotulo="Data de Abertura" valor={empresa.data_abertura ? formatarData(empresa.data_abertura) : "-"} />
               <CampoResumo rotulo="Funcionários" valor={String(empresa.qtd_funcionarios ?? 0)} />
@@ -148,6 +134,7 @@ function CampoResumo({
 
 function FormCadastroEmpresa({
   empresa,
+  segmentos,
 }: {
   empresa: {
     id: string;
@@ -159,6 +146,7 @@ function FormCadastroEmpresa({
     data_abertura: string | null;
     qtd_funcionarios: number | null;
   };
+  segmentos: { valor: string; rotulo: string }[];
 }) {
   return (
     <form action={salvarCadastroEmpresa.bind(null, empresa.id)} className="space-y-3">
@@ -176,11 +164,9 @@ function FormCadastroEmpresa({
         dica="Informe somente os 14 números."
       />
       <div className="grid gap-3 sm:grid-cols-2">
-        <CampoSelect
-          id="segmento"
-          rotulo="Segmento"
-          defaultValue={empresa.segmento}
-          opcoes={OPCOES_SEGMENTO}
+        <SeletorSegmento
+          valorInicial={empresa.segmento}
+          segmentos={[{ valor: "geral", rotulo: "Geral" }, ...segmentos]}
         />
         <CampoSelect
           id="regime_tributario"
@@ -217,6 +203,7 @@ function FormCadastroEmpresa({
 
 function EditarCadastro({
   empresa,
+  segmentos,
 }: {
   empresa: {
     id: string;
@@ -228,10 +215,11 @@ function EditarCadastro({
     data_abertura: string | null;
     qtd_funcionarios: number | null;
   };
+  segmentos: { valor: string; rotulo: string }[];
 }) {
   return (
     <EditarCadastroModal>
-      <FormCadastroEmpresa empresa={empresa} />
+      <FormCadastroEmpresa empresa={empresa} segmentos={segmentos} />
     </EditarCadastroModal>
   );
 }

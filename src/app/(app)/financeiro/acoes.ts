@@ -153,11 +153,13 @@ export async function salvarTitulo(
 
   let valorPago = 0;
   let tipo = analise.data.tipo;
+  let grupoFixaExistente: string | null = null;
   if (id) {
     const atual = await buscarTituloAutorizado(id, empresaId, sessao);
     if (!atual) return { erro: "Título não encontrado.", valores };
     valorPago = Number(atual.valor_pago);
     tipo = atual.tipo;
+    grupoFixaExistente = (atual.grupo_fixa_id as string | null) ?? null;
     if (analise.data.valor < valorPago) {
       return {
         campos: { valor: `O valor não pode ser menor que o total já baixado (${valorPago.toFixed(2)}).` },
@@ -183,6 +185,15 @@ export async function salvarTitulo(
   if (id) {
     const { error } = await supabaseAdmin.from("titulos").update(registro).eq("id", id);
     if (error) return { erro: "Não foi possível atualizar o título.", valores };
+
+    // Em contas fixas, a classificação vale para todas as parcelas do mesmo cadastro.
+    if (grupoFixaExistente) {
+      await supabaseAdmin
+        .from("titulos")
+        .update({ plano_conta_id: analise.data.planoContaId ?? null })
+        .eq("empresa_id", empresaId)
+        .eq("grupo_fixa_id", grupoFixaExistente);
+    }
   } else {
     const meses = fixa ? analise.data.mesesRecorrencia : 1;
     const grupoFixaId = fixa ? crypto.randomUUID() : null;
@@ -355,6 +366,113 @@ export async function excluirGrupoContaFixa(
   return { ok: true };
 }
 
+/**
+ * Ajusta quantas parcelas em aberto a conta fixa deve ter.
+ * Aumenta: gera novas parcelas após a última.
+ * Reduz: remove as parcelas futuras sem baixa (nunca as que já tiveram pagamento).
+ */
+export async function ajustarMesesRestantesContaFixa(
+  _anterior: EstadoFormulario,
+  formData: FormData,
+): Promise<EstadoFormulario> {
+  const valores = valoresEnviados(formData);
+  const contexto = await contextoFinanceiro(formData);
+  if ("erro" in contexto) return { erro: contexto.erro, valores };
+
+  const tituloId = String(formData.get("tituloId") ?? "").trim();
+  const mesesInformados = Number(String(formData.get("mesesRestantes") ?? "").trim());
+  if (!Number.isInteger(mesesInformados) || mesesInformados < 1 || mesesInformados > 60) {
+    return {
+      campos: { mesesRestantes: "Informe de 1 a 60 meses restantes." },
+      valores,
+    };
+  }
+
+  const base = await buscarTituloAutorizado(tituloId, contexto.empresaId, contexto.sessao);
+  if (!base) return { erro: "Conta fixa não encontrada.", valores };
+
+  let grupoId = (base.grupo_fixa_id as string | null) ?? null;
+
+  // Cadastros legados sem grupo: agrupa pela parcela atual.
+  if (!grupoId) {
+    grupoId = crypto.randomUUID();
+    const { error: erroGrupo } = await supabaseAdmin
+      .from("titulos")
+      .update({ grupo_fixa_id: grupoId, fixa: true })
+      .eq("id", tituloId)
+      .eq("empresa_id", contexto.empresaId);
+    if (erroGrupo) return { erro: "Não foi possível ajustar as parcelas.", valores };
+  }
+
+  const { data: parcelas, error: erroParcelas } = await supabaseAdmin
+    .from("titulos")
+    .select(
+      "id, tipo, contraparte, documento, emissao, vencimento, valor, valor_pago, status, plano_conta_id, fixa",
+    )
+    .eq("empresa_id", contexto.empresaId)
+    .eq("grupo_fixa_id", grupoId)
+    .order("vencimento", { ascending: true });
+
+  if (erroParcelas || !parcelas?.length) {
+    return { erro: "Não foi possível carregar as parcelas da conta fixa.", valores };
+  }
+
+  const restantes = parcelas.filter((p) => p.status !== "pago" && p.status !== "cancelado");
+  const atuais = restantes.length;
+
+  if (mesesInformados === atuais) {
+    return { ok: true };
+  }
+
+  if (mesesInformados < atuais) {
+    const remover = atuais - mesesInformados;
+    // Remove do fim (vencimento mais futuro), só sem baixa.
+    const candidatas = [...restantes]
+      .filter((p) => Number(p.valor_pago) === 0)
+      .sort((a, b) => b.vencimento.localeCompare(a.vencimento));
+
+    if (candidatas.length < remover) {
+      return {
+        erro: `Só é possível reduzir para ${atuais - candidatas.length} mês(es): há parcelas com baixa que não podem ser removidas.`,
+        valores,
+      };
+    }
+
+    const ids = candidatas.slice(0, remover).map((p) => p.id);
+    const { error } = await supabaseAdmin.from("titulos").delete().in("id", ids);
+    if (error) return { erro: "Não foi possível reduzir as parcelas.", valores };
+  } else {
+    const adicionar = mesesInformados - atuais;
+    const ultima = [...parcelas].sort((a, b) => b.vencimento.localeCompare(a.vencimento))[0];
+    const modelo = restantes[0] ?? ultima;
+
+    const novas = Array.from({ length: adicionar }, (_, indice) => ({
+      empresa_id: contexto.empresaId,
+      tipo: modelo.tipo,
+      contraparte: modelo.contraparte,
+      documento: modelo.documento,
+      emissao: modelo.emissao
+        ? adicionarMeses(String(modelo.emissao).slice(0, 10), atuais + indice)
+        : null,
+      vencimento: adicionarMeses(String(ultima.vencimento).slice(0, 10), indice + 1),
+      valor: Number(modelo.valor),
+      valor_pago: 0,
+      status: "aberto" as const,
+      plano_conta_id: modelo.plano_conta_id,
+      origem: "manual" as const,
+      fixa: true,
+      grupo_fixa_id: grupoId,
+      created_by: contexto.sessao.usuarioId,
+    }));
+
+    const { error } = await supabaseAdmin.from("titulos").insert(novas);
+    if (error) return { erro: "Não foi possível gerar as novas parcelas.", valores };
+  }
+
+  revalidarFinanceiro();
+  return { ok: true };
+}
+
 async function buscarLancamentoAutorizado(id: string, empresaId: string, sessao: Sessao) {
   if (!id) return null;
   const { data } = await supabaseAdmin
@@ -371,12 +489,195 @@ async function buscarTituloAutorizado(id: string, empresaId: string, sessao: Ses
   if (!id) return null;
   const { data } = await supabaseAdmin
     .from("titulos")
-    .select("id, empresa_id, tipo, contraparte, documento, valor, valor_pago, status, plano_conta_id")
+    .select(
+      "id, empresa_id, tipo, contraparte, documento, valor, valor_pago, status, plano_conta_id, grupo_fixa_id",
+    )
     .eq("id", id)
     .maybeSingle();
   if (!data || (sessao.role !== "admin" && data.empresa_id !== empresaId)) return null;
   if (sessao.role === "admin" && data.empresa_id !== empresaId) return null;
   return data;
+}
+
+/** Atualiza a categoria (plano de contas) de todas as parcelas de uma conta fixa. */
+export async function atualizarCategoriaContaFixa(
+  _anterior: EstadoFormulario,
+  formData: FormData,
+): Promise<EstadoFormulario> {
+  const valores = valoresEnviados(formData);
+  const contexto = await contextoFinanceiro(formData);
+  if ("erro" in contexto) return { erro: contexto.erro, valores };
+
+  const tituloId = String(formData.get("tituloId") ?? "").trim();
+  const grupoFixaId = String(formData.get("grupoFixaId") ?? "").trim();
+  const planoContaId = String(formData.get("planoContaId") ?? "").trim() || null;
+
+  const titulo = await buscarTituloAutorizado(tituloId, contexto.empresaId, contexto.sessao);
+  if (!titulo) return { erro: "Conta fixa não encontrada.", valores };
+
+  if (!(await planoContaPertenceAEmpresa(contexto.empresaId, planoContaId ?? undefined))) {
+    return { campos: { planoContaId: "Categoria inválida para esta empresa." }, valores };
+  }
+
+  if (grupoFixaId || titulo.grupo_fixa_id) {
+    const grupo = grupoFixaId || (titulo.grupo_fixa_id as string);
+    const { error } = await supabaseAdmin
+      .from("titulos")
+      .update({ plano_conta_id: planoContaId })
+      .eq("empresa_id", contexto.empresaId)
+      .eq("grupo_fixa_id", grupo);
+    if (error) return { erro: "Não foi possível atualizar a categoria.", valores };
+  } else {
+    const { error } = await supabaseAdmin
+      .from("titulos")
+      .update({ plano_conta_id: planoContaId })
+      .eq("id", tituloId)
+      .eq("empresa_id", contexto.empresaId);
+    if (error) return { erro: "Não foi possível atualizar a categoria.", valores };
+  }
+
+  revalidarFinanceiro();
+  return { ok: true };
+}
+
+/** Cria uma categoria rápida (plano de contas) para uso em contas fixas. */
+export async function criarCategoriaRapida(
+  _anterior: EstadoFormulario,
+  formData: FormData,
+): Promise<EstadoFormulario> {
+  const valores = valoresEnviados(formData);
+  const contexto = await contextoFinanceiro(formData);
+  if ("erro" in contexto) return { erro: contexto.erro, valores };
+
+  const nome = String(formData.get("nome") ?? "").trim();
+  const tipoBruto = String(formData.get("tipo") ?? "despesa");
+  const tipo = (
+    ["receita", "deducao", "custo", "despesa", "investimento", "nao_operacional"].includes(tipoBruto)
+      ? tipoBruto
+      : "despesa"
+  ) as
+    | "receita"
+    | "deducao"
+    | "custo"
+    | "despesa"
+    | "investimento"
+    | "nao_operacional";
+
+  if (!nome) return { campos: { nome: "Informe o nome da categoria." }, valores };
+
+  const grupoDre =
+    tipo === "receita"
+      ? "receita_bruta"
+      : tipo === "deducao"
+        ? "deducoes"
+        : tipo === "custo"
+          ? "custo_variavel"
+          : tipo === "investimento"
+            ? "investimento"
+            : tipo === "nao_operacional"
+              ? "nao_operacional"
+              : "despesa_administrativa";
+
+  const codigo = `CF.${Date.now().toString().slice(-6)}`;
+  const { error } = await supabaseAdmin.from("plano_contas").insert({
+    empresa_id: contexto.empresaId,
+    codigo,
+    nome,
+    tipo,
+    grupo_dre: grupoDre,
+    ativo: true,
+  });
+
+  if (error) {
+    if (error.code === "23505") {
+      return { erro: "Já existe uma categoria com este código. Tente de novo.", valores };
+    }
+    return { erro: "Não foi possível criar a categoria.", valores };
+  }
+
+  revalidarFinanceiro();
+  revalidatePath("/cadastros/plano-de-contas");
+  return { ok: true };
+}
+
+/** Cadastra ou atualiza o valor previsto (orçamento) de uma conta na competência. */
+export async function salvarPrevisto(
+  _anterior: EstadoFormulario,
+  formData: FormData,
+): Promise<EstadoFormulario> {
+  const valores = valoresEnviados(formData);
+  const contexto = await contextoFinanceiro(formData);
+  if ("erro" in contexto) return { erro: contexto.erro, valores };
+
+  const planoContaId = String(formData.get("planoContaId") ?? "").trim();
+  const competenciaBruta = String(formData.get("competencia") ?? "").trim();
+  const competencia =
+    competenciaBruta.match(/^\d{4}-\d{2}$/)
+      ? `${competenciaBruta}-01`
+      : competenciaBruta.match(/^\d{4}-\d{2}-01$/)
+        ? competenciaBruta
+        : null;
+  const valorInformado = parseValor(formData.get("valor"));
+
+  const campos: Record<string, string> = {};
+  if (!planoContaId) campos.planoContaId = "Selecione a conta.";
+  if (!competencia) campos.competencia = "Informe o mês no formato aaaa-mm.";
+  if (valorInformado === null || valorInformado < 0) {
+    campos.valor = "Informe um valor previsto maior ou igual a zero.";
+  }
+  if (Object.keys(campos).length) return { campos, valores };
+
+  if (!(await planoContaPertenceAEmpresa(contexto.empresaId, planoContaId))) {
+    return { campos: { planoContaId: "Conta inválida para esta empresa." }, valores };
+  }
+
+  const { data: conta } = await supabaseAdmin
+    .from("plano_contas")
+    .select("tipo")
+    .eq("id", planoContaId)
+    .maybeSingle();
+  if (!conta) return { campos: { planoContaId: "Conta não encontrada." }, valores };
+
+  // Na DRE, receitas entram positivas e demais grupos negativos (como o realizado).
+  const valorPrevisto = conta.tipo === "receita" ? valorInformado! : -Math.abs(valorInformado!);
+
+  const { error } = await supabaseAdmin.from("orcamentos").upsert(
+    {
+      empresa_id: contexto.empresaId,
+      plano_conta_id: planoContaId,
+      competencia,
+      valor_previsto: valorPrevisto,
+    },
+    { onConflict: "empresa_id,plano_conta_id,competencia" },
+  );
+
+  if (error) return { erro: "Não foi possível salvar o previsto.", valores };
+  revalidarFinanceiro();
+  return { ok: true };
+}
+
+export async function excluirPrevisto(
+  _anterior: EstadoFormulario,
+  formData: FormData,
+): Promise<EstadoFormulario> {
+  const contexto = await contextoFinanceiro(formData);
+  if ("erro" in contexto) return { erro: contexto.erro };
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) return { erro: "Previsto não encontrado." };
+
+  const { error } = await supabaseAdmin
+    .from("orcamentos")
+    .delete()
+    .eq("id", id)
+    .eq("empresa_id", contexto.empresaId);
+
+  if (error) return { erro: "Não foi possível excluir o previsto." };
+  revalidarFinanceiro();
+  return { ok: true };
+}
+
+export async function excluirPrevistoForm(formData: FormData) {
+  await excluirPrevisto({}, formData);
 }
 
 function revalidarFinanceiro() {
@@ -386,6 +687,8 @@ function revalidarFinanceiro() {
     "/financeiro/contas-a-pagar",
     "/financeiro/contas-a-receber",
     "/financeiro/dre",
+    "/financeiro/orcamento",
+    "/financeiro/receitas",
     "/indicadores",
   ]) revalidatePath(rota);
 }

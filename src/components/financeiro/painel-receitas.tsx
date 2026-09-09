@@ -18,20 +18,20 @@ import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Kpi } from "@/components/ui/kpi";
 import { EIXO, MolduraGrafico, TooltipCartao } from "@/components/graficos/base";
 import { data as formatarData, moeda, moedaCompacta, percentual } from "@/lib/format";
-import type { Lancamento, LinhaDre } from "@/lib/types";
+import type { LinhaDre, MovimentoDre } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const CORES = ["#b38a36", "#6d8d7a", "#7c7297", "#bd7a5c", "#587c9c", "#9b8b5f"];
 
-type Fonte = { id: string; nome: string; valor: number; movimentos: Lancamento[] };
+type Fonte = { id: string; nome: string; valor: number; movimentos: MovimentoDre[] };
 
 export function PainelReceitas({
   linhas,
-  lancamentos,
+  movimentos,
   competencia,
 }: {
   linhas: LinhaDre[];
-  lancamentos: Lancamento[];
+  movimentos: MovimentoDre[];
   competencia: string;
 }) {
   const fontes = useMemo<Fonte[]>(() => {
@@ -41,10 +41,10 @@ export function PainelReceitas({
         id: conta.planoContaId,
         nome: conta.conta,
         valor: conta.realizado,
-        movimentos: lancamentos.filter((lancamento) => lancamento.planoContaId === conta.planoContaId),
+        movimentos: movimentos.filter((movimento) => movimento.planoContaId === conta.planoContaId),
       }))
       .sort((a, b) => b.valor - a.valor);
-  }, [lancamentos, linhas]);
+  }, [movimentos, linhas]);
 
   const [fonteSelecionada, setFonteSelecionada] = useState<string | null>(null);
   const fonteAtiva = fontes.find((fonte) => fonte.id === fonteSelecionada) ?? null;

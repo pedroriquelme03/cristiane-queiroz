@@ -25,6 +25,7 @@ import type {
   Indicador,
   Lancamento,
   LinhaDre,
+  MovimentoDre,
   PlanoAcao,
   PlanoConta,
   PontoFluxo,
@@ -44,15 +45,18 @@ export {
 
 const hoje = () => new Date().toISOString().slice(0, 10);
 
-/** Primeiro e ultimo dia do mes da competencia. */
+/** Primeiro e ultimo dia do mes da competencia (aaaa-mm-01), sem fuso. */
 function intervaloDoMes(competencia: string) {
-  const d = new Date(`${competencia}T12:00:00`);
-  const inicio = new Date(d.getFullYear(), d.getMonth(), 1);
-  const fim = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-  return { inicio: iso(inicio), fim: iso(fim) };
+  const [anoTexto, mesTexto] = competencia.slice(0, 7).split("-");
+  const ano = Number(anoTexto);
+  const mes = Number(mesTexto);
+  const ultimoDia = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
+  const mesPad = String(mes).padStart(2, "0");
+  return {
+    inicio: `${anoTexto}-${mesPad}-01`,
+    fim: `${anoTexto}-${mesPad}-${String(ultimoDia).padStart(2, "0")}`,
+  };
 }
-
-const iso = (d: Date) => d.toISOString().slice(0, 10);
 
 // ---------------------------------------------------------------------------
 // Empresa e cadastros
@@ -173,6 +177,53 @@ export async function getPlanoContas(empresaIdParam?: string): Promise<PlanoCont
 
   if (error) throw new Error("Nao foi possivel carregar o plano de contas.");
   return (data ?? []).map(mapPlanoConta);
+}
+
+export type OrcamentoLinha = {
+  id: string;
+  planoContaId: string;
+  codigo: string;
+  conta: string;
+  tipo: PlanoConta["tipo"];
+  competencia: string;
+  valorPrevisto: number;
+};
+
+/** Orçamentos (previstos) da competência, com dados da conta. */
+export async function getOrcamentos(
+  competencia: string,
+  empresaIdParam?: string,
+): Promise<OrcamentoLinha[]> {
+  const empresaId = await resolverEmpresaId(empresaIdParam);
+  if (!empresaId) return [];
+
+  const mes = competencia.slice(0, 7) + "-01";
+  const supabase = await criarSupabaseObrigatorio();
+  const { data, error } = await supabase
+    .from("orcamentos")
+    .select("id, plano_conta_id, competencia, valor_previsto, plano_contas(codigo, nome, tipo)")
+    .eq("empresa_id", empresaId)
+    .eq("competencia", mes)
+    .order("competencia");
+
+  if (error) throw new Error("Nao foi possivel carregar os previstos do orçamento.");
+
+  return (data ?? [])
+    .map((row) => {
+      const conta = Array.isArray(row.plano_contas) ? row.plano_contas[0] : row.plano_contas;
+      if (!conta) return null;
+      return {
+        id: row.id,
+        planoContaId: row.plano_conta_id,
+        codigo: conta.codigo,
+        conta: conta.nome,
+        tipo: conta.tipo as PlanoConta["tipo"],
+        competencia: dataIso(row.competencia),
+        valorPrevisto: numero(row.valor_previsto),
+      } satisfies OrcamentoLinha;
+    })
+    .filter((item): item is OrcamentoLinha => item !== null)
+    .sort((a, b) => a.codigo.localeCompare(b.codigo, "pt-BR"));
 }
 
 export async function getContasBancarias(empresaIdParam?: string): Promise<ContaBancaria[]> {
@@ -308,34 +359,135 @@ export async function getFluxoProjetado(dias = 90, empresaIdParam?: string): Pro
   }));
 }
 
-/** Títulos em aberto com vencimento no período (contas/recebimentos fixos e avulsos). */
+/** Títulos em aberto com vencimento no mês (contas fixas e avulsas). */
 export async function getPrevistoPeriodo(
   inicio: string,
   fim: string,
   empresaIdParam?: string,
-): Promise<{ aReceber: number; aPagar: number }> {
+): Promise<{
+  aReceber: number;
+  aPagar: number;
+  aReceberNoMes: number;
+  aPagarNoMes: number;
+  aReceberAtrasado: number;
+  aPagarAtrasado: number;
+  titulosNoMes: Array<{
+    id: string;
+    tipo: "pagar" | "receber";
+    vencimento: string;
+    valor: number;
+    valorPago: number;
+    saldo: number;
+    contraparte: string;
+    fixa: boolean;
+    descricao: string;
+  }>;
+}> {
+  const vazio = {
+    aReceber: 0,
+    aPagar: 0,
+    aReceberNoMes: 0,
+    aPagarNoMes: 0,
+    aReceberAtrasado: 0,
+    aPagarAtrasado: 0,
+    titulosNoMes: [] as Array<{
+      id: string;
+      tipo: "pagar" | "receber";
+      vencimento: string;
+      valor: number;
+      valorPago: number;
+      saldo: number;
+      contraparte: string;
+      fixa: boolean;
+      descricao: string;
+    }>,
+  };
   const empresaId = await resolverEmpresaId(empresaIdParam);
-  if (!empresaId) return { aReceber: 0, aPagar: 0 };
+  if (!empresaId) return vazio;
 
   const supabase = await criarSupabaseObrigatorio();
   const { data, error } = await supabase
     .from("titulos")
-    .select("tipo, valor, valor_pago")
+    .select("id, tipo, valor, valor_pago, vencimento, contraparte, fixa, documento")
     .eq("empresa_id", empresaId)
     .in("status", ["aberto", "parcial"])
-    .gte("vencimento", inicio)
-    .lte("vencimento", fim);
+    .lte("vencimento", fim)
+    .order("vencimento");
 
   if (error) throw new Error("Nao foi possivel carregar titulos previstos.");
 
-  let aReceber = 0;
-  let aPagar = 0;
+  const total = { ...vazio, titulosNoMes: [] as typeof vazio.titulosNoMes };
   for (const row of data ?? []) {
     const saldo = numero(row.valor) - numero(row.valor_pago);
-    if (row.tipo === "receber") aReceber += saldo;
-    else aPagar += saldo;
+    if (saldo <= 0) continue;
+    const vencimento = dataIso(row.vencimento);
+    const noMes = vencimento >= inicio && vencimento <= fim;
+    const tipo = row.tipo === "receber" ? "receber" : "pagar";
+
+    if (tipo === "receber") {
+      if (noMes) total.aReceberNoMes += saldo;
+      else total.aReceberAtrasado += saldo;
+    } else if (noMes) {
+      total.aPagarNoMes += saldo;
+    } else {
+      total.aPagarAtrasado += saldo;
+    }
+
+    if (!noMes) continue;
+
+    total.titulosNoMes.push({
+      id: row.id,
+      tipo,
+      vencimento,
+      valor: numero(row.valor),
+      valorPago: numero(row.valor_pago),
+      saldo,
+      contraparte: row.contraparte ?? "—",
+      fixa: Boolean(row.fixa),
+      descricao: row.documento
+        ? `${row.contraparte ?? "Título"} (${row.documento})`
+        : (row.contraparte ?? "Título"),
+    });
   }
-  return { aReceber, aPagar };
+
+  // Totais do mês respeitam o vencimento (sem misturar atrasados de outros meses).
+  total.aReceber = total.aReceberNoMes;
+  total.aPagar = total.aPagarNoMes;
+  return total;
+}
+
+/**
+ * Soma títulos com vencimento no dia ao fluxo realizado e recalcula o saldo.
+ * Assim parcelas de contas fixas aparecem no gráfico no dia do vencimento.
+ */
+export function mesclarTitulosNoFluxo(
+  fluxo: PontoFluxo[],
+  titulos: Array<{ vencimento: string; tipo: "pagar" | "receber"; saldo: number }>,
+  saldoInicial: number,
+): PontoFluxo[] {
+  if (!fluxo.length) return fluxo;
+
+  const porData = new Map(
+    fluxo.map((ponto) => [
+      ponto.data,
+      { data: ponto.data, entradas: ponto.entradas, saidas: ponto.saidas, saldoAcumulado: 0 },
+    ]),
+  );
+
+  for (const titulo of titulos) {
+    const ponto = porData.get(titulo.vencimento);
+    if (!ponto) continue;
+    if (titulo.tipo === "receber") ponto.entradas += titulo.saldo;
+    else ponto.saidas += titulo.saldo;
+  }
+
+  let saldo = saldoInicial;
+  return [...porData.values()]
+    .sort((a, b) => a.data.localeCompare(b.data))
+    .map((ponto) => {
+      saldo += ponto.entradas - ponto.saidas;
+      return { ...ponto, saldoAcumulado: saldo };
+    });
 }
 
 export async function getLancamentos(
@@ -409,7 +561,7 @@ export async function getTitulos(tipo: Titulo["tipo"], empresaIdParam?: string):
   return (data ?? []).map(mapTitulo);
 }
 
-/** Espelha dre_gerencial(): realizado e previsto por conta no periodo. */
+/** DRE gerencial: realizado por competência (emissão do título) + lançamentos manuais. */
 export async function getDre(
   inicio: string,
   fim: string,
@@ -419,14 +571,161 @@ export async function getDre(
   if (!empresaId) return [];
 
   const supabase = await criarSupabaseObrigatorio();
-  const { data, error } = await supabase.rpc("dre_gerencial", {
-    p_empresa_id: empresaId,
-    p_inicio: inicio,
-    p_fim: fim,
-  });
+  const [
+    { data: contas, error: erroContas },
+    { data: orcamentos, error: erroOrcamentos },
+    { data: titulos, error: erroTitulos },
+    { data: lancamentos, error: erroLancamentos },
+  ] = await Promise.all([
+    supabase
+      .from("plano_contas")
+      .select("id, codigo, nome, tipo, grupo_dre")
+      .eq("empresa_id", empresaId)
+      .eq("ativo", true)
+      .order("codigo"),
+    supabase
+      .from("orcamentos")
+      .select("plano_conta_id, valor_previsto, competencia")
+      .eq("empresa_id", empresaId)
+      .gte("competencia", inicio.slice(0, 7) + "-01")
+      .lte("competencia", fim),
+    supabase
+      .from("titulos")
+      .select("id, tipo, valor, emissao, vencimento, plano_conta_id, status")
+      .eq("empresa_id", empresaId)
+      .neq("status", "cancelado")
+      .not("plano_conta_id", "is", null),
+    supabase
+      .from("lancamentos")
+      .select("id, tipo, valor, data, plano_conta_id, origem")
+      .eq("empresa_id", empresaId)
+      .gte("data", inicio)
+      .lte("data", fim)
+      .neq("origem", "integracao")
+      .not("plano_conta_id", "is", null),
+  ]);
 
-  if (error) throw new Error("Nao foi possivel carregar a DRE.");
-  return (data ?? []).map(mapLinhaDre);
+  if (erroContas) throw new Error("Nao foi possivel carregar o plano de contas da DRE.");
+  if (erroOrcamentos) throw new Error("Nao foi possivel carregar o orçamento da DRE.");
+  if (erroTitulos) throw new Error("Nao foi possivel carregar os títulos da DRE.");
+  if (erroLancamentos) throw new Error("Nao foi possivel carregar os lançamentos da DRE.");
+
+  const realizadoPorConta = new Map<string, number>();
+  const previstoPorConta = new Map<string, number>();
+
+  for (const titulo of titulos ?? []) {
+    const competencia = dataIso(titulo.emissao) || dataIso(titulo.vencimento);
+    if (!competencia || competencia < inicio || competencia > fim) continue;
+    if (!titulo.plano_conta_id) continue;
+    const sinal = titulo.tipo === "receber" ? 1 : -1;
+    realizadoPorConta.set(
+      titulo.plano_conta_id,
+      (realizadoPorConta.get(titulo.plano_conta_id) ?? 0) + sinal * numero(titulo.valor),
+    );
+  }
+
+  for (const lancamento of lancamentos ?? []) {
+    if (!lancamento.plano_conta_id) continue;
+    const sinal = lancamento.tipo === "entrada" ? 1 : -1;
+    realizadoPorConta.set(
+      lancamento.plano_conta_id,
+      (realizadoPorConta.get(lancamento.plano_conta_id) ?? 0) + sinal * numero(lancamento.valor),
+    );
+  }
+
+  for (const orcamento of orcamentos ?? []) {
+    if (!orcamento.plano_conta_id) continue;
+    previstoPorConta.set(
+      orcamento.plano_conta_id,
+      (previstoPorConta.get(orcamento.plano_conta_id) ?? 0) + numero(orcamento.valor_previsto),
+    );
+  }
+
+  return (contas ?? []).map((conta) => ({
+    planoContaId: conta.id,
+    codigo: conta.codigo,
+    conta: conta.nome,
+    grupoDre: conta.grupo_dre as LinhaDre["grupoDre"],
+    tipo: conta.tipo as LinhaDre["tipo"],
+    realizado: realizadoPorConta.get(conta.id) ?? 0,
+    previsto: previstoPorConta.get(conta.id) ?? 0,
+  }));
+}
+
+/**
+ * Movimentos que formam o Realizado da DRE no período:
+ * títulos pela data de emissão (+ vencimento se emissão vazia) e lançamentos manuais/importados.
+ * Baixas de títulos (origem integração) ficam de fora para não duplicar.
+ */
+export async function getMovimentosDre(
+  inicio: string,
+  fim: string,
+  empresaIdParam?: string,
+): Promise<MovimentoDre[]> {
+  const empresaId = await resolverEmpresaId(empresaIdParam);
+  if (!empresaId) return [];
+
+  const supabase = await criarSupabaseObrigatorio();
+  const [{ data: titulos, error: erroTitulos }, { data: lancamentos, error: erroLancamentos }] =
+    await Promise.all([
+      supabase
+        .from("titulos")
+        .select("id, tipo, valor, emissao, vencimento, plano_conta_id, status, contraparte, documento, fixa")
+        .eq("empresa_id", empresaId)
+        .neq("status", "cancelado")
+        .not("plano_conta_id", "is", null),
+      supabase
+        .from("lancamentos")
+        .select("id, tipo, valor, data, plano_conta_id, origem, descricao, contraparte")
+        .eq("empresa_id", empresaId)
+        .gte("data", inicio)
+        .lte("data", fim)
+        .neq("origem", "integracao")
+        .not("plano_conta_id", "is", null),
+    ]);
+
+  if (erroTitulos) throw new Error("Nao foi possivel carregar os títulos da DRE.");
+  if (erroLancamentos) throw new Error("Nao foi possivel carregar os lançamentos da DRE.");
+
+  const movimentos: MovimentoDre[] = [];
+
+  for (const titulo of titulos ?? []) {
+    const data = dataIso(titulo.emissao) || dataIso(titulo.vencimento);
+    if (!data || data < inicio || data > fim) continue;
+    const tipo = titulo.tipo === "receber" ? "entrada" : "saida";
+    const rotulo = titulo.fixa
+      ? titulo.tipo === "receber"
+        ? "Recebimento fixo"
+        : "Conta fixa"
+      : titulo.tipo === "receber"
+        ? "Contas a receber"
+        : "Contas a pagar";
+    movimentos.push({
+      id: `titulo:${titulo.id}`,
+      data,
+      tipo,
+      valor: numero(titulo.valor),
+      descricao: titulo.documento ? `${rotulo}: ${titulo.documento}` : rotulo,
+      contraparte: titulo.contraparte ?? null,
+      origem: "titulo",
+      planoContaId: titulo.plano_conta_id,
+    });
+  }
+
+  for (const lancamento of lancamentos ?? []) {
+    movimentos.push({
+      id: lancamento.id,
+      data: dataIso(lancamento.data),
+      tipo: lancamento.tipo === "entrada" ? "entrada" : "saida",
+      valor: numero(lancamento.valor),
+      descricao: lancamento.descricao ?? "Lançamento",
+      contraparte: lancamento.contraparte ?? null,
+      origem: lancamento.origem ?? "manual",
+      planoContaId: lancamento.plano_conta_id,
+    });
+  }
+
+  return movimentos.sort((a, b) => b.data.localeCompare(a.data) || a.descricao.localeCompare(b.descricao));
 }
 
 // ---------------------------------------------------------------------------

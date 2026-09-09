@@ -9,7 +9,8 @@ export type Segmento =
   | "comercio"
   | "servicos"
   | "industria"
-  | "alimentacao";
+  | "alimentacao"
+  | (string & {});
 
 export type RegimeTributario = "simples" | "presumido" | "real" | "mei";
 
@@ -351,4 +352,16 @@ export interface LinhaDre {
   tipo: PlanoConta["tipo"];
   realizado: number;
   previsto: number;
+}
+
+/** Movimento que compõe o Realizado da DRE (título por emissão ou lançamento manual). */
+export interface MovimentoDre {
+  id: string;
+  data: string;
+  tipo: "entrada" | "saida";
+  valor: number;
+  descricao: string;
+  contraparte: string | null;
+  origem: string;
+  planoContaId: string | null;
 }

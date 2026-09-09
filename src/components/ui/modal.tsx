@@ -5,9 +5,17 @@ import { X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
+/** Alinha com o breakpoint `md` do Tailwind: mobile = abaixo de 768px. */
+function ehMobile() {
+  if (typeof window === "undefined") return false;
+  return window.matchMedia("(max-width: 767px)").matches;
+}
+
 /**
  * Modal sobre o <dialog> nativo: foco preso, Esc para fechar e inerte por
  * baixo já vêm do navegador, sem biblioteca nem armadilha de acessibilidade.
+ *
+ * Clique no backdrop fecha só no mobile; no desktop usa X, Cancelar ou Esc.
  */
 export function Modal({
   aberto,
@@ -39,10 +47,9 @@ export function Modal({
       ref={ref}
       aria-labelledby="titulo-modal"
       onClose={onFechar}
-      // Clique no backdrop fecha: o alvo do clique é o próprio dialog
-      // quando cai fora do conteúdo.
       onClick={(e) => {
-        if (e.target === ref.current) onFechar();
+        // Só fecha ao clicar fora no mobile; no desktop exige X / Cancelar / Esc.
+        if (e.target === ref.current && ehMobile()) onFechar();
       }}
       className={cn(
         // overflow-visible: o CampoSelect porta o menu para dentro do dialog;

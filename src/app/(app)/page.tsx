@@ -27,7 +27,7 @@ import {
   getFluxoProjetado,
   getIndicadores,
   getKpis,
-  getLancamentos,
+  getMovimentosDre,
   getPlanosAcao,
   intervaloDoMes,
 } from "@/lib/dados";
@@ -62,14 +62,14 @@ const COR_ALERTA = {
 export default async function DashboardPage({ empresaId }: { empresaId?: string }) {
   const competencia = await getCompetenciaAtual();
   const { inicio, fim } = intervaloDoMes(competencia);
-  const [kpis, projecao, indicadores, acoes, alertas, linhasDre, lancamentos] = await Promise.all([
+  const [kpis, projecao, indicadores, acoes, alertas, linhasDre, movimentosDre] = await Promise.all([
     getKpis(competencia, empresaId),
     getFluxoProjetado(90, empresaId),
     getIndicadores(empresaId),
     getPlanosAcao(empresaId),
     getAlertas(empresaId),
     getDre(inicio, fim, empresaId),
-    getLancamentos(inicio, fim, empresaId),
+    getMovimentosDre(inicio, fim, empresaId),
   ]);
 
   const acoesAtivas = acoes.filter((a) => a.status === "em_andamento");
@@ -217,7 +217,7 @@ export default async function DashboardPage({ empresaId }: { empresaId?: string 
 
       <ResumoReceitasDashboard
         linhas={linhasDre}
-        lancamentos={lancamentos}
+        movimentos={movimentosDre.filter((item) => item.tipo === "entrada")}
         href={`/financeiro/receitas${sufixoEmpresa}`}
       />
 

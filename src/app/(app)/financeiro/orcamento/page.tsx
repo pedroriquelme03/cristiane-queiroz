@@ -1,8 +1,16 @@
 import { Badge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Kpi } from "@/components/ui/kpi";
-import { getCompetenciaAtual, getDre, intervaloDoMes } from "@/lib/dados";
+import { FormCadastrarPrevistos } from "@/components/financeiro/form-cadastrar-previsto";
+import {
+  getCompetenciaAtual,
+  getDre,
+  getOrcamentos,
+  getPlanoContas,
+  intervaloDoMes,
+} from "@/lib/dados";
 import { competenciaExtenso, moeda, percentual } from "@/lib/format";
+import { getSessao } from "@/lib/sessao";
 import { cn } from "@/lib/utils";
 
 /** Tolerância antes de a conta ser tratada como desvio relevante. */
@@ -13,14 +21,20 @@ export default async function OrcamentoPage({
 }: {
   searchParams: Promise<{ empresa?: string | string[] }>;
 }) {
-  const { empresa } = await searchParams;
+  const [{ empresa }, sessao] = await Promise.all([searchParams, getSessao()]);
   const empresaId = typeof empresa === "string" ? empresa : undefined;
+  const empresaIdAtiva = sessao.role === "admin" ? empresaId : sessao.empresaId;
+  const podeEditar = Boolean(empresaIdAtiva) && (sessao.role === "admin" || sessao.role === "cliente");
+
   const competencia = await getCompetenciaAtual();
   const { inicio, fim } = intervaloDoMes(competencia);
-  const linhas = (await getDre(inicio, fim, empresaId)).filter(
-    (l) => l.realizado !== 0 || l.previsto !== 0,
-  );
+  const [linhasDre, contas, orcamentos] = await Promise.all([
+    getDre(inicio, fim, empresaIdAtiva),
+    getPlanoContas(empresaIdAtiva),
+    getOrcamentos(competencia, empresaIdAtiva),
+  ]);
 
+  const linhas = linhasDre.filter((l) => l.realizado !== 0 || l.previsto !== 0);
   const receitas = linhas.filter((l) => l.tipo === "receita");
   const gastos = linhas.filter((l) => l.tipo !== "receita");
 
@@ -48,6 +62,14 @@ export default async function OrcamentoPage({
 
   return (
     <>
+      <FormCadastrarPrevistos
+        empresaId={empresaIdAtiva}
+        competencia={competencia}
+        contas={contas}
+        orcamentos={orcamentos}
+        podeEditar={podeEditar}
+      />
+
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Kpi rotulo="Resultado orçado" valor={moeda(totalPrevisto)} />
         <Kpi
@@ -91,40 +113,48 @@ export default async function OrcamentoPage({
                 </tr>
               </thead>
               <tbody>
-                {desvios.map((linha) => {
-                  const favoravel = linha.desvio > 0;
-                  return (
-                    <tr key={linha.planoContaId} className="border-b border-border last:border-0">
-                      <th scope="row" className="px-5 py-2.5 text-left font-normal">
-                        <span className="tabular text-xs text-muted-foreground">
-                          {linha.codigo}
-                        </span>{" "}
-                        {linha.conta}
-                      </th>
-                      <td className="tabular px-3 py-2.5 text-right text-muted-foreground">
-                        {moeda(linha.previsto)}
-                      </td>
-                      <td className="tabular px-3 py-2.5 text-right font-medium">
-                        {moeda(linha.realizado)}
-                      </td>
-                      <td
-                        className={cn(
-                          "tabular px-3 py-2.5 text-right font-medium",
-                          favoravel ? "text-positive" : "text-negative",
-                        )}
-                      >
-                        {linha.desvio > 0 ? "+" : ""}
-                        {moeda(linha.desvio)}
-                      </td>
-                      <td className="px-5 py-2.5 text-right">
-                        <Badge tom={favoravel ? "positivo" : "negativo"}>
-                          {favoravel ? "Favorável" : "Desfavorável"}{" "}
-                          {percentual(Math.abs(linha.desvioRelativo), 0)}
-                        </Badge>
-                      </td>
-                    </tr>
-                  );
-                })}
+                {desvios.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-5 py-8 text-center text-sm text-muted-foreground">
+                      Cadastre os previstos acima para acompanhar os desvios do mês.
+                    </td>
+                  </tr>
+                ) : (
+                  desvios.map((linha) => {
+                    const favoravel = linha.desvio > 0;
+                    return (
+                      <tr key={linha.planoContaId} className="border-b border-border last:border-0">
+                        <th scope="row" className="px-5 py-2.5 text-left font-normal">
+                          <span className="tabular text-xs text-muted-foreground">
+                            {linha.codigo}
+                          </span>{" "}
+                          {linha.conta}
+                        </th>
+                        <td className="tabular px-3 py-2.5 text-right text-muted-foreground">
+                          {moeda(linha.previsto)}
+                        </td>
+                        <td className="tabular px-3 py-2.5 text-right font-medium">
+                          {moeda(linha.realizado)}
+                        </td>
+                        <td
+                          className={cn(
+                            "tabular px-3 py-2.5 text-right font-medium",
+                            favoravel ? "text-positive" : "text-negative",
+                          )}
+                        >
+                          {linha.desvio > 0 ? "+" : ""}
+                          {moeda(linha.desvio)}
+                        </td>
+                        <td className="px-5 py-2.5 text-right">
+                          <Badge tom={favoravel ? "positivo" : "negativo"}>
+                            {favoravel ? "Favorável" : "Desfavorável"}{" "}
+                            {percentual(Math.abs(linha.desvioRelativo), 0)}
+                          </Badge>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
@@ -175,30 +205,34 @@ function ComparativoCard({
           </li>
         </ul>
 
-        {linhas.map((linha) => (
-          <div key={linha.planoContaId} className="space-y-1">
-            <div className="flex items-baseline justify-between gap-3 text-sm">
-              <span className="truncate">{linha.conta}</span>
-              <span className="tabular shrink-0 text-xs text-muted-foreground">
-                {moeda(linha.realizado)} de {moeda(linha.previsto)}
-              </span>
-            </div>
-            <div className="space-y-0.5">
-              <div className="h-1.5 w-full rounded-full bg-surface-muted">
-                <div
-                  className="h-full rounded-full bg-[var(--eixo)]"
-                  style={{ width: `${(Math.abs(linha.previsto) / escala) * 100}%` }}
-                />
+        {linhas.length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">Sem dados neste grupo.</p>
+        ) : (
+          linhas.map((linha) => (
+            <div key={linha.planoContaId} className="space-y-1">
+              <div className="flex items-baseline justify-between gap-3 text-sm">
+                <span className="truncate">{linha.conta}</span>
+                <span className="tabular shrink-0 text-xs text-muted-foreground">
+                  {moeda(linha.realizado)} de {moeda(linha.previsto)}
+                </span>
               </div>
-              <div className="h-1.5 w-full rounded-full bg-surface-muted">
-                <div
-                  className="h-full rounded-full bg-[var(--serie-saldo)]"
-                  style={{ width: `${(Math.abs(linha.realizado) / escala) * 100}%` }}
-                />
+              <div className="space-y-0.5">
+                <div className="h-1.5 w-full rounded-full bg-surface-muted">
+                  <div
+                    className="h-full rounded-full bg-[var(--eixo)]"
+                    style={{ width: `${(Math.abs(linha.previsto) / escala) * 100}%` }}
+                  />
+                </div>
+                <div className="h-1.5 w-full rounded-full bg-surface-muted">
+                  <div
+                    className="h-full rounded-full bg-[var(--serie-saldo)]"
+                    style={{ width: `${(Math.abs(linha.realizado) / escala) * 100}%` }}
+                  />
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          ))
+        )}
       </CardBody>
     </Card>
   );
