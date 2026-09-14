@@ -97,6 +97,7 @@ export const ABAS_FINANCEIRO: { href: string; rotulo: string; recurso: RecursoPl
   { href: "/financeiro/dre", rotulo: "DRE gerencial", recurso: "financeiro-avancado" },
   { href: "/financeiro/orcamento", rotulo: "Orçamento", recurso: "financeiro-avancado" },
   { href: "/financeiro/importar", rotulo: "Importar planilha", recurso: "financeiro-avancado" },
+  { href: "/financeiro/relatorios", rotulo: "Relatórios", recurso: "financeiro-basico" },
 ];
 
 /** Abas da tela Empresa. */

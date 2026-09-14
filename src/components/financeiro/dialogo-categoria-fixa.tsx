@@ -135,10 +135,11 @@ export function DialogoEditarCategoriaFixa({
             id={`categoria-fixa-${grupo.titulo.id}`}
             name="planoContaId"
             rotulo="Categoria"
+            required
             pesquisavel
-            defaultValue={grupo.titulo.planoContaId ?? ""}
+            defaultValue={grupo.titulo.planoContaId ?? contasUteis[0]?.id ?? ""}
             opcoes={[
-              { valor: "", rotulo: "— sem categoria —" },
+              { valor: "", rotulo: "Selecione a classificação" },
               ...contasUteis.map((conta) => ({
                 valor: conta.id,
                 rotulo: conta.nome,

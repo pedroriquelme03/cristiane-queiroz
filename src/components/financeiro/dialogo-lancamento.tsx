@@ -122,8 +122,9 @@ export function DialogoLancamento({
               id={`plano-conta-${sufixo}`}
               name="planoContaId"
               rotulo="Classificação"
+              required
               opcoes={[
-                { valor: "", rotulo: "— sem classificação —" },
+                { valor: "", rotulo: "Selecione a classificação" },
                 ...contas.map((conta) => ({
                   valor: conta.id,
                   rotulo: conta.nome,
@@ -131,7 +132,7 @@ export function DialogoLancamento({
                 })),
               ]}
               pesquisavel
-              defaultValue={valor("planoContaId", lancamento?.planoContaId)}
+              defaultValue={valor("planoContaId", lancamento?.planoContaId ?? contas[0]?.id)}
               erro={estado.campos?.planoContaId}
             />
             <CampoTexto

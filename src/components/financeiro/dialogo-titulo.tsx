@@ -225,8 +225,9 @@ export function DialogoTitulo({
                 id={`plano-conta-titulo-${sufixo}`}
                 name="planoContaId"
                 rotulo="Classificação"
+                required
                 opcoes={[
-                  { valor: "", rotulo: "— sem classificação —" },
+                  { valor: "", rotulo: "Selecione a classificação" },
                   ...contasUteis.map((conta) => ({
                     valor: conta.id,
                     rotulo: conta.nome,
@@ -234,7 +235,7 @@ export function DialogoTitulo({
                   })),
                 ]}
                 pesquisavel
-                defaultValue={valor("planoContaId", titulo?.planoContaId)}
+                defaultValue={valor("planoContaId", titulo?.planoContaId ?? contasUteis[0]?.id)}
                 erro={estado.campos?.planoContaId}
                 dica={
                   contasUteis.length === 0

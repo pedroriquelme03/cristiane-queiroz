@@ -8,6 +8,7 @@ import {
 } from "@/components/plano-acao/controles-plano-acao";
 import { Badge, type TomBadge } from "@/components/ui/badge";
 import { CabecalhoPagina } from "@/components/ui/cabecalho-pagina";
+import { LinkGerarRelatorio } from "@/components/relatorios/link-gerar-relatorio";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Kpi } from "@/components/ui/kpi";
 import { Progresso } from "@/components/ui/progresso";
@@ -129,6 +130,7 @@ export default async function PlanoDeAcaoPage({
         <CardHeader
           titulo="Ações"
           descricao="Problema identificado, ação proposta e situação atual"
+          acao={<LinkGerarRelatorio href="/plano-de-acao/relatorio" empresaId={empresaIdAtiva} />}
         />
         <CardBody className="space-y-3">
           {acoes.length === 0 ? (

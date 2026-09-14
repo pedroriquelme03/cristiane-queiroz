@@ -55,7 +55,7 @@ async function contextoFinanceiro(formData: FormData) {
 }
 
 async function planoContaPertenceAEmpresa(empresaId: string, planoContaId?: string) {
-  if (!planoContaId) return true;
+  if (!planoContaId) return false;
   const { data } = await supabaseAdmin
     .from("plano_contas")
     .select("id")
@@ -90,7 +90,7 @@ export async function salvarLancamento(
     descricao: analise.data.descricao,
     contraparte: analise.data.contraparte ?? null,
     documento: analise.data.documento ?? null,
-    plano_conta_id: analise.data.planoContaId ?? null,
+    plano_conta_id: analise.data.planoContaId,
   };
 
   if (id) {
@@ -177,7 +177,7 @@ export async function salvarTitulo(
     emissao: analise.data.emissao ?? null,
     vencimento: analise.data.vencimento,
     valor: analise.data.valor,
-    plano_conta_id: analise.data.planoContaId ?? null,
+    plano_conta_id: analise.data.planoContaId,
     status,
     fixa,
   };
@@ -190,7 +190,7 @@ export async function salvarTitulo(
     if (grupoFixaExistente) {
       await supabaseAdmin
         .from("titulos")
-        .update({ plano_conta_id: analise.data.planoContaId ?? null })
+        .update({ plano_conta_id: analise.data.planoContaId })
         .eq("empresa_id", empresaId)
         .eq("grupo_fixa_id", grupoFixaExistente);
     }
@@ -510,12 +510,13 @@ export async function atualizarCategoriaContaFixa(
 
   const tituloId = String(formData.get("tituloId") ?? "").trim();
   const grupoFixaId = String(formData.get("grupoFixaId") ?? "").trim();
-  const planoContaId = String(formData.get("planoContaId") ?? "").trim() || null;
+  const planoContaId = String(formData.get("planoContaId") ?? "").trim();
 
   const titulo = await buscarTituloAutorizado(tituloId, contexto.empresaId, contexto.sessao);
   if (!titulo) return { erro: "Conta fixa não encontrada.", valores };
+  if (!planoContaId) return { campos: { planoContaId: "Selecione a classificação." }, valores };
 
-  if (!(await planoContaPertenceAEmpresa(contexto.empresaId, planoContaId ?? undefined))) {
+  if (!(await planoContaPertenceAEmpresa(contexto.empresaId, planoContaId))) {
     return { campos: { planoContaId: "Categoria inválida para esta empresa." }, valores };
   }
 
@@ -689,6 +690,7 @@ function revalidarFinanceiro() {
     "/financeiro/dre",
     "/financeiro/orcamento",
     "/financeiro/receitas",
+    "/financeiro/relatorios",
     "/indicadores",
   ]) revalidatePath(rota);
 }

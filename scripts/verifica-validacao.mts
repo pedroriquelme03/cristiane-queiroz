@@ -9,18 +9,19 @@ const caso = (rotulo: string, esquema: { safeParse: (v: unknown) => { success: b
   console.log(`${ok ? "ok   " : "FALHA"} ${rotulo} -> ${obtido ?? "válido"}`);
 };
 
-const lancOk = { data: "2026-07-05", tipo: "entrada", valor: "1.234,56", descricao: "Recebimento" };
+const lancOk = { data: "2026-07-05", tipo: "entrada", valor: "1.234,56", descricao: "Recebimento", planoContaId: "conta-1" };
 console.log("--- lançamento ---");
 caso("completo válido", esquemaLancamento, lancOk, null);
 caso("valor pt-BR", esquemaLancamento, { ...lancOk, valor: "12.480,50" }, null);
 caso("valor zero", esquemaLancamento, { ...lancOk, valor: "0" }, "valor: O valor deve ser maior que zero");
 caso("valor negativo", esquemaLancamento, { ...lancOk, valor: "-50,00" }, "valor: O valor deve ser maior que zero");
 caso("valor ilegível", esquemaLancamento, { ...lancOk, valor: "abc" }, "valor: Valor inválido");
+caso("sem classificação", esquemaLancamento, { ...lancOk, planoContaId: "" }, "planoContaId: Selecione a classificação");
 caso("sem descrição", esquemaLancamento, { ...lancOk, descricao: "" }, "descricao: Informe a descrição");
 caso("tipo inválido", esquemaLancamento, { ...lancOk, tipo: "transferencia" }, "tipo: Selecione entrada ou saída");
 caso("data mal formada", esquemaLancamento, { ...lancOk, data: "05/07/2026" }, "data: Data inválida");
 
-const titOk = { tipo: "pagar", contraparte: "Copel", vencimento: "2026-08-10", valor: "1.000,00" };
+const titOk = { tipo: "pagar", contraparte: "Copel", vencimento: "2026-08-10", valor: "1.000,00", planoContaId: "conta-1" };
 console.log("\n--- título ---");
 caso("completo válido", esquemaTitulo, titOk, null);
 caso("pago parcial", esquemaTitulo, { ...titOk, valorPago: "400,00" }, null);
@@ -28,6 +29,7 @@ caso("pago > valor", esquemaTitulo, { ...titOk, valorPago: "1.500,00" }, "valorP
 caso("pago negativo", esquemaTitulo, { ...titOk, valorPago: "-10,00" }, "valorPago: O valor pago não pode ser negativo");
 caso("emissão após vencimento", esquemaTitulo, { ...titOk, emissao: "2026-09-01" }, "emissao: A emissão não pode ser depois do vencimento");
 caso("emissão antes", esquemaTitulo, { ...titOk, emissao: "2026-07-01" }, null);
+caso("sem classificação", esquemaTitulo, { ...titOk, planoContaId: "" }, "planoContaId: Selecione a classificação");
 caso("sem contraparte", esquemaTitulo, { ...titOk, contraparte: "  " }, "contraparte: Informe o cliente ou fornecedor");
 
 console.log("\n--- status derivado ---");

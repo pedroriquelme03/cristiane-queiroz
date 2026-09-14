@@ -154,8 +154,9 @@ export function DialogoParcelaCartao({
                 id="cartao-plano"
                 name="planoContaId"
                 rotulo="Categoria"
+                required
                 opcoes={[
-                  { valor: "", rotulo: "— sem categoria —" },
+                  { valor: "", rotulo: "Selecione a classificação" },
                   ...contasUteis.map((conta) => ({
                     valor: conta.id,
                     rotulo: conta.nome,
@@ -163,7 +164,7 @@ export function DialogoParcelaCartao({
                   })),
                 ]}
                 pesquisavel
-                defaultValue={estado.valores?.planoContaId}
+                defaultValue={estado.valores?.planoContaId ?? contasUteis[0]?.id}
                 erro={estado.campos?.planoContaId}
               />
               {contasUteis.length === 0 ? (

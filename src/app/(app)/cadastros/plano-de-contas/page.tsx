@@ -4,6 +4,7 @@ import {
   RemoverConta,
 } from "@/components/financeiro/plano-contas-controles";
 import { AvisoSemEmpresa } from "@/components/cadastros/ui";
+import { LinkGerarRelatorio } from "@/components/relatorios/link-gerar-relatorio";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { getPlanoContas } from "@/lib/dados";
 import { empresaAtiva } from "@/lib/empresa-ativa";
@@ -31,12 +32,15 @@ export default async function CadastroPlanoDeContasPage({
         titulo="Classificações"
         descricao="Cada classificação vira uma linha do DRE gerencial. Também alimenta o campo Classificação em lançamentos e contas a pagar/receber."
         acao={
-          podeEditar ? (
-            <div className="flex flex-wrap items-center gap-2">
-              {contas.length === 0 ? <BotaoPlanoPadrao empresaId={empresaIdAtiva} /> : null}
-              <DialogoNovaConta empresaId={empresaIdAtiva} />
-            </div>
-          ) : null
+          <div className="flex flex-wrap items-center gap-2">
+            <LinkGerarRelatorio href="/financeiro/relatorios/plano-de-contas" empresaId={empresaIdAtiva} />
+            {podeEditar ? (
+              <>
+                {contas.length === 0 ? <BotaoPlanoPadrao empresaId={empresaIdAtiva} /> : null}
+                <DialogoNovaConta empresaId={empresaIdAtiva} />
+              </>
+            ) : null}
+          </div>
         }
       />
       <CardBody className="px-0 py-0">

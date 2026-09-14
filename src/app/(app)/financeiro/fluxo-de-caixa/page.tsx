@@ -3,6 +3,7 @@ import {
   ExcluirLancamento,
 } from "@/components/financeiro/dialogo-lancamento";
 import { FiltroMesFluxo } from "@/components/financeiro/filtro-mes-fluxo";
+import { LinkGerarRelatorio } from "@/components/relatorios/link-gerar-relatorio";
 import { GraficoMovimento } from "@/components/graficos/grafico-movimento";
 import { GraficoSaldo } from "@/components/graficos/grafico-saldo";
 import { Badge } from "@/components/ui/badge";
@@ -126,6 +127,9 @@ export default async function FluxoDeCaixaPage({
   return (
     <>
       <FiltroMesFluxo competencia={competencia} opcoes={opcoesCompetencia} />
+      <div className="flex justify-end">
+        <LinkGerarRelatorio href="/financeiro/relatorios/fluxo-de-caixa" empresaId={empresaIdAtiva} />
+      </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Kpi

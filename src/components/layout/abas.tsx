@@ -18,7 +18,9 @@ export function Abas({
     <div className="border-b border-border">
       <nav className="-mb-px flex gap-1 overflow-x-auto" aria-label="Seções">
         {itens.map((item) => {
-          const ativo = pathname === item.href;
+          const ativo =
+            pathname === item.href ||
+            (item.href !== "/" && pathname.startsWith(`${item.href}/`));
           const href = buscaAtual ? `${item.href}?${buscaAtual}` : item.href;
           return (
             <Link

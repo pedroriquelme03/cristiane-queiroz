@@ -1,4 +1,5 @@
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { LinkGerarRelatorio } from "@/components/relatorios/link-gerar-relatorio";
 import { Kpi } from "@/components/ui/kpi";
 import { RegistrosGrupoInterativos } from "@/components/financeiro/dre-interativa";
 import { getCompetenciaAtual, getDre, getMovimentosDre, intervaloDoMes } from "@/lib/dados";
@@ -122,6 +123,7 @@ export default async function DrePage({
         <CardHeader
           titulo="DRE gerencial"
           descricao={`Linhas = Classificações de Cadastros. Realizado x orçado de ${competenciaExtenso(competencia)}. Realizado pela data de emissão. AV = participação na receita bruta.`}
+          acao={<LinkGerarRelatorio href="/financeiro/relatorios/dre" empresaId={empresaId} />}
         />
         <CardBody className="px-0 py-0">
           <div className="overflow-x-auto">

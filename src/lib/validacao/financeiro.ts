@@ -65,7 +65,7 @@ export const esquemaLancamento = z.object({
   descricao: z.string().trim().min(1, "Informe a descrição").max(200),
   contraparte: textoOpcional,
   documento: textoOpcional,
-  planoContaId: textoOpcional,
+  planoContaId: z.string().trim().min(1, "Selecione a classificação"),
 });
 
 export const esquemaTitulo = z
@@ -90,9 +90,10 @@ export const esquemaTitulo = z
       })
       .refine((v) => v >= 0, "O valor pago não pode ser negativo"),
     documento: textoOpcional,
-    planoContaId: textoOpcional,
+    planoContaId: z.string().trim().min(1, "Selecione a classificação"),
     fixa: z
-      .union([z.literal("on"), z.literal("true"), z.literal("false"), z.literal(""), z.undefined()])
+      .union([z.literal("on"), z.literal("true"), z.literal("false"), z.literal("")])
+      .optional()
       .transform((v) => v === "on" || v === "true"),
     mesesRecorrencia: z
       .string()

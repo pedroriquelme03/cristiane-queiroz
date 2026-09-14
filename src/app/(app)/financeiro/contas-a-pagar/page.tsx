@@ -3,6 +3,7 @@ import { DialogoParcelaCartao } from "@/components/financeiro/dialogo-parcela-ca
 import { DialogoTitulo } from "@/components/financeiro/dialogo-titulo";
 import { TabelaContasFixas } from "@/components/financeiro/tabela-contas-fixas";
 import { TabelaTitulos } from "@/components/financeiro/tabela-titulos";
+import { LinkGerarRelatorio } from "@/components/relatorios/link-gerar-relatorio";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Kpi } from "@/components/ui/kpi";
 import { agruparContasFixas, getPlanoContas, getTitulos, statusEfetivo } from "@/lib/dados";
@@ -73,13 +74,16 @@ export default async function ContasAPagarPage({
           titulo="Contas fixas"
           descricao="Uma linha por cadastro — parcelas mensais agrupadas com meses restantes a pagar."
           acao={
-            podeEditar ? (
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                <DialogoNovaCategoria empresaId={empresaIdAtiva} tipoPadrao="despesa" />
-                <DialogoParcelaCartao contas={contas} empresaId={empresaIdAtiva} />
-                <DialogoTitulo tipo="pagar" contas={contas} empresaId={empresaIdAtiva} fixaPadrao />
-              </div>
-            ) : null
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <LinkGerarRelatorio href="/financeiro/relatorios/contratos" empresaId={empresaIdAtiva} rotulo="Relatório de contratos" />
+              {podeEditar ? (
+                <>
+                  <DialogoNovaCategoria empresaId={empresaIdAtiva} tipoPadrao="despesa" />
+                  <DialogoParcelaCartao contas={contas} empresaId={empresaIdAtiva} />
+                  <DialogoTitulo tipo="pagar" contas={contas} empresaId={empresaIdAtiva} fixaPadrao />
+                </>
+              ) : null}
+            </div>
           }
         />
         <CardBody className="px-0 py-0">
@@ -110,7 +114,12 @@ export default async function ContasAPagarPage({
         <CardHeader
           titulo="Contas a pagar em aberto"
           descricao="Ordenadas por vencimento"
-          acao={podeEditar ? <DialogoTitulo tipo="pagar" contas={contas} empresaId={empresaIdAtiva} /> : null}
+          acao={
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <LinkGerarRelatorio href="/financeiro/relatorios/contas-a-pagar" empresaId={empresaIdAtiva} />
+              {podeEditar ? <DialogoTitulo tipo="pagar" contas={contas} empresaId={empresaIdAtiva} /> : null}
+            </div>
+          }
         />
         <CardBody className="px-0 py-0">
           <TabelaTitulos titulos={abertos} rotuloContraparte="Fornecedor" contas={contas} empresaId={empresaIdAtiva} podeEditar={podeEditar} />

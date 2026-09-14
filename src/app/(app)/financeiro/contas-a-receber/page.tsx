@@ -2,6 +2,7 @@ import { DialogoNovaCategoria } from "@/components/financeiro/dialogo-categoria-
 import { DialogoTitulo } from "@/components/financeiro/dialogo-titulo";
 import { TabelaContasFixas } from "@/components/financeiro/tabela-contas-fixas";
 import { TabelaTitulos } from "@/components/financeiro/tabela-titulos";
+import { LinkGerarRelatorio } from "@/components/relatorios/link-gerar-relatorio";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Kpi } from "@/components/ui/kpi";
 import { getClientesConsultoria } from "@/lib/dados-clientes";
@@ -83,18 +84,21 @@ export default async function ContasAReceberPage({
           titulo="Recebimentos fixos"
           descricao="Uma linha por cadastro — parcelas mensais agrupadas com meses restantes a receber."
           acao={
-            podeEditar ? (
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                <DialogoNovaCategoria empresaId={empresaIdAtiva} tipoPadrao="receita" />
-                <DialogoTitulo
-                  tipo="receber"
-                  contas={contas}
-                  empresaId={empresaIdAtiva}
-                  fixaPadrao
-                  clientesConsultoria={opcoesClientes}
-                />
-              </div>
-            ) : null
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <LinkGerarRelatorio href="/financeiro/relatorios/contratos" empresaId={empresaIdAtiva} rotulo="Relatório de contratos" />
+              {podeEditar ? (
+                <>
+                  <DialogoNovaCategoria empresaId={empresaIdAtiva} tipoPadrao="receita" />
+                  <DialogoTitulo
+                    tipo="receber"
+                    contas={contas}
+                    empresaId={empresaIdAtiva}
+                    fixaPadrao
+                    clientesConsultoria={opcoesClientes}
+                  />
+                </>
+              ) : null}
+            </div>
           }
         />
         <CardBody className="px-0 py-0">
@@ -125,7 +129,12 @@ export default async function ContasAReceberPage({
         <CardHeader
           titulo="Recebimentos previstos"
           descricao="Ordenados por vencimento"
-          acao={podeEditar ? <DialogoTitulo tipo="receber" contas={contas} empresaId={empresaIdAtiva} /> : null}
+          acao={
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <LinkGerarRelatorio href="/financeiro/relatorios/contas-a-receber" empresaId={empresaIdAtiva} />
+              {podeEditar ? <DialogoTitulo tipo="receber" contas={contas} empresaId={empresaIdAtiva} /> : null}
+            </div>
+          }
         />
         <CardBody className="px-0 py-0">
           <TabelaTitulos titulos={abertos} rotuloContraparte="Cliente" contas={contas} empresaId={empresaIdAtiva} podeEditar={podeEditar} />
