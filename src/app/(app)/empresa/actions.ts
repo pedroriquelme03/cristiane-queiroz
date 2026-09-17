@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache";
 
 import { parseData } from "@/lib/importacao/parsers";
+import { exigirEdicaoEmpresa } from "@/lib/autorizacao";
 import { SEGMENTOS_CADASTRO } from "@/lib/segmentos";
-import { getSessao } from "@/lib/sessao";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import type { RegimeTributario } from "@/lib/types";
 
@@ -32,10 +32,7 @@ export interface EstadoFormularioEstrutura {
 }
 
 async function validarPodeEditarEmpresa(empresaId: string) {
-  const sessao = await getSessao();
-  if (sessao.role === "admin") return sessao;
-  if (sessao.empresaId === empresaId) return sessao;
-  throw new Error("Não autorizado");
+  return exigirEdicaoEmpresa(empresaId);
 }
 
 function revalidarEmpresa(empresaId: string) {

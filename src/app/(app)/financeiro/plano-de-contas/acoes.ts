@@ -2,8 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 
+import { resolverEmpresaAlvo } from "@/lib/autorizacao";
 import { PLANO_CONTAS_PADRAO } from "@/lib/plano-contas-padrao";
-import { getSessao } from "@/lib/sessao";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { supabaseConfigurado } from "@/lib/supabase/config";
 import type { GrupoDre, PlanoConta } from "@/lib/types";
@@ -15,17 +15,16 @@ export interface EstadoPlanoContas {
 }
 
 async function contextoEmpresa(formData: FormData) {
-  const sessao = await getSessao();
-  if (sessao.role !== "admin" && sessao.role !== "cliente") {
-    return { erro: "Seu perfil não pode alterar o plano de contas." } as const;
-  }
-  const empresaInformada = String(formData.get("empresaId") ?? "").trim();
-  const empresaId = sessao.role === "admin" ? empresaInformada : sessao.empresaId;
-  if (!empresaId) return { erro: "Selecione uma empresa antes de continuar." } as const;
+  const alvo = await resolverEmpresaAlvo(String(formData.get("empresaId") ?? ""), {
+    papeis: ["admin", "cliente"],
+    negado: "Seu perfil não pode alterar o plano de contas.",
+    semEmpresa: "Selecione uma empresa antes de continuar.",
+  });
+  if ("erro" in alvo) return alvo;
   if (!supabaseConfigurado || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return { erro: "O Supabase não está configurado para gravação." } as const;
   }
-  return { sessao, empresaId } as const;
+  return alvo;
 }
 
 function revalidar() {

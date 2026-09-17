@@ -33,3 +33,27 @@ create policy "plano_acao_historico: membros registram"
 create policy "plano_acao_historico: admin remove"
   on public.plano_acao_historico for delete
   using (private.is_admin());
+
+-- ---------------------------------------------------------------------------
+-- Vitrine pública de planos (consolidado do antigo 0011_planos_vitrine_publica)
+--
+-- A landing page pública (/apresentacao) precisa ler os planos públicos sem
+-- autenticação. As policies de admin de public.planos chamam private.is_admin(),
+-- cuja execução foi revogada de anon em 0010. Como as policies permissivas de
+-- SELECT são avaliadas para o papel da requisição, a policy "planos: admin le
+-- todos" derrubava a leitura anônima inteira com "permission denied for function
+-- is_admin".
+--
+-- Correção: escopar as policies de admin ao papel authenticated (o admin é
+-- sempre autenticado). Assim uma requisição anônima avalia apenas a policy
+-- "planos: vitrine para autenticados" (publico and ativo), que não chama
+-- is_admin() e já vale para o papel public (inclui anon).
+-- ---------------------------------------------------------------------------
+
+alter policy "planos: admin le todos"
+  on public.planos
+  to authenticated;
+
+alter policy "planos: admin gerencia"
+  on public.planos
+  to authenticated;

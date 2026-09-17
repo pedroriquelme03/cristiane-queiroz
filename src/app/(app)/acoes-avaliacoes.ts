@@ -2,8 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 
+import { exigirSessao, temPapel } from "@/lib/autorizacao";
 import { AREAS_AVALIACAO, type TipoAvaliacao } from "@/lib/avaliacoes";
-import { getSessao } from "@/lib/sessao";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { supabaseConfigurado } from "@/lib/supabase/config";
 
@@ -26,11 +26,11 @@ export async function salvarAvaliacao(
   _anterior: EstadoAvaliacao,
   formData: FormData,
 ): Promise<EstadoAvaliacao> {
-  const sessao = await getSessao();
+  const sessao = await exigirSessao();
   const valores = valoresEnviados(formData);
   const campos: Record<string, string> = {};
 
-  if (sessao.role !== "admin") {
+  if (!temPapel(sessao, ["admin"])) {
     return {
       erro: "Apenas administradores podem registrar ou alterar avaliações.",
       valores,

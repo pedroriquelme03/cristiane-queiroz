@@ -10,6 +10,11 @@ import {
   SESSAO_LONGA_SEGUNDOS,
 } from "@/lib/supabase/server";
 import { supabaseConfigurado } from "@/lib/supabase/config";
+import { obterIpCliente, verificarRateLimit } from "@/lib/rate-limit";
+
+/** Tentativas de login por IP antes de bloquear temporariamente. */
+const LOGIN_MAX_TENTATIVAS = 10;
+const LOGIN_JANELA_SEGUNDOS = 60;
 
 export interface EstadoLogin {
   erro?: string;
@@ -72,6 +77,21 @@ export async function entrar(
       }
     }
     return { campos, email: emailDigitado };
+  }
+
+  // Freio de brute force por IP. Fica antes da chamada ao Auth para não gastar
+  // tentativa no provedor e para não permitir varredura de senhas.
+  const ip = await obterIpCliente();
+  const limite = await verificarRateLimit({
+    chave: `login:${ip}`,
+    max: LOGIN_MAX_TENTATIVAS,
+    janelaSegundos: LOGIN_JANELA_SEGUNDOS,
+  });
+  if (!limite.permitido) {
+    return {
+      erro: "Muitas tentativas seguidas. Aguarde um minuto e tente de novo.",
+      email: emailDigitado,
+    };
   }
 
   const lembrar = formData.get("lembrar") === "on";

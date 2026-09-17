@@ -2,8 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 
+import { exigirSessao, temPapel } from "@/lib/autorizacao";
 import { slugSegmento } from "@/lib/dados-segmentos";
-import { getSessao } from "@/lib/sessao";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { supabaseConfigurado } from "@/lib/supabase/config";
@@ -19,8 +19,8 @@ export async function cadastrarSegmento(
   _anterior: EstadoSegmento,
   formData: FormData,
 ): Promise<EstadoSegmento> {
-  const sessao = await getSessao();
-  if (sessao.role !== "admin" && sessao.role !== "cliente" && sessao.role !== "consultor") {
+  const sessao = await exigirSessao();
+  if (!temPapel(sessao, ["admin", "cliente", "consultor"])) {
     return { erro: "Sem permissão para cadastrar segmento." };
   }
 

@@ -2,12 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 
-import { getSessao } from "@/lib/sessao";
+import { exigirAdmin } from "@/lib/autorizacao";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
 async function validarAdmin() {
-  const sessao = await getSessao();
-  if (sessao.role !== "admin") throw new Error("Não autorizado");
+  await exigirAdmin();
 }
 
 function atualizarEstrutura(empresaId: string) {

@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
-import { getSessao } from "@/lib/sessao";
+import { exigirAdmin } from "@/lib/autorizacao";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
 export interface EstadoAcesso {
@@ -12,9 +12,7 @@ export interface EstadoAcesso {
 }
 
 async function validarAdmin() {
-  const sessao = await getSessao();
-  if (sessao.role !== "admin") throw new Error("Não autorizado");
-  return sessao;
+  return exigirAdmin();
 }
 
 async function usuarioPertenceAEmpresa(empresaId: string, usuarioId: string) {

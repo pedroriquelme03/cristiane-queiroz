@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { nivelDoPlano } from "@/lib/acesso-planos";
+import { exigirAdmin } from "@/lib/autorizacao";
 import { getSessao } from "@/lib/sessao";
 import { supabaseConfigurado } from "@/lib/supabase/config";
 import { supabaseAdmin } from "@/lib/supabase/admin";
@@ -155,8 +156,7 @@ async function criarSolicitacaoReuniao(
 }
 
 export async function aceitarSolicitacaoReuniao(solicitacaoId: string) {
-  const sessao = await getSessao();
-  if (sessao.role !== "admin") throw new Error("Não autorizado.");
+  const sessao = await exigirAdmin("Não autorizado.");
 
   const { data: solicitacao, error: solicitacaoError } = await supabaseAdmin
     .from("alertas")

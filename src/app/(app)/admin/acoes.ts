@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { getSessao } from "@/lib/sessao";
+import { exigirSessao, temPapel } from "@/lib/autorizacao";
 import { supabaseConfigurado } from "@/lib/supabase/config";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
@@ -56,8 +56,8 @@ export async function salvarPlano(
     return { erro: AGUARDANDO_BANCO, valores: valoresEnviados(formData) };
   }
 
-  const sessao = await getSessao();
-  if (sessao.role !== "admin") {
+  const sessao = await exigirSessao();
+  if (!temPapel(sessao, ["admin"])) {
     return { erro: "Apenas administradores podem alterar planos." };
   }
 
@@ -116,8 +116,8 @@ export async function criarAssinatura(
   _anterior: EstadoAdmin,
   formData: FormData,
 ): Promise<EstadoAdmin> {
-  const sessao = await getSessao();
-  if (sessao.role !== "admin") return { erro: "Apenas administradores podem vincular planos." };
+  const sessao = await exigirSessao();
+  if (!temPapel(sessao, ["admin"])) return { erro: "Apenas administradores podem vincular planos." };
 
   const empresaId = String(formData.get("empresaId") ?? "");
   const planoId = String(formData.get("planoId") ?? "");
@@ -197,8 +197,8 @@ export async function alternarBloqueio(formData: FormData): Promise<EstadoAdmin>
     };
   }
 
-  const sessao = await getSessao();
-  if (sessao.role !== "admin") {
+  const sessao = await exigirSessao();
+  if (!temPapel(sessao, ["admin"])) {
     return { erro: "Apenas administradores podem alterar o bloqueio." };
   }
 
@@ -295,8 +295,8 @@ export async function trocarPlano(formData: FormData): Promise<EstadoAdmin> {
     };
   }
 
-  const sessao = await getSessao();
-  if (sessao.role !== "admin") {
+  const sessao = await exigirSessao();
+  if (!temPapel(sessao, ["admin"])) {
     return { erro: "Apenas administradores podem trocar planos." };
   }
 

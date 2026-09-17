@@ -2,8 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 
+import { exigirSessao, temPapel } from "@/lib/autorizacao";
 import { parseData, parseValor } from "@/lib/importacao/parsers";
-import { getSessao, type Sessao } from "@/lib/sessao";
+import { type Sessao } from "@/lib/sessao";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import type { StatusAcao } from "@/lib/types";
 
@@ -36,9 +37,9 @@ export async function salvarPlanoAcao(
   _anterior: EstadoPlanoAcao,
   formData: FormData,
 ): Promise<EstadoPlanoAcao> {
-  const sessao = await getSessao();
+  const sessao = await exigirSessao();
   const valores = valoresEnviados(formData);
-  if (sessao.role !== "admin") {
+  if (!temPapel(sessao, ["admin"])) {
     return { erro: "Apenas administradores podem criar ou editar ações.", valores };
   }
 
@@ -127,9 +128,9 @@ export async function atualizarProgresso(
   _anterior: EstadoPlanoAcao,
   formData: FormData,
 ): Promise<EstadoPlanoAcao> {
-  const sessao = await getSessao();
+  const sessao = await exigirSessao();
   const valores = valoresEnviados(formData);
-  if (sessao.role !== "admin" && sessao.role !== "cliente") {
+  if (!temPapel(sessao, ["admin", "cliente"])) {
     return { erro: "Seu perfil não pode atualizar o progresso das ações.", valores };
   }
   const id = String(formData.get("id") ?? "").trim();
@@ -139,7 +140,7 @@ export async function atualizarProgresso(
   const campos: Record<string, string> = {};
 
   if (!id) return { erro: "Ação não informada.", valores };
-  if (!STATUS.includes(statusInformado) || (sessao.role !== "admin" && statusInformado === "cancelado")) {
+  if (!STATUS.includes(statusInformado) || (!temPapel(sessao, ["admin"]) && statusInformado === "cancelado")) {
     campos.status = "Selecione um status permitido.";
   }
   if (percentualInformado === null) campos.percentual = "Use um número inteiro de 0 a 100.";
@@ -151,7 +152,7 @@ export async function atualizarProgresso(
     .eq("id", id)
     .maybeSingle();
   if (buscaError || !acao) return { erro: "Ação não encontrada.", valores };
-  if (sessao.role !== "admin" && acao.empresa_id !== sessao.empresaId) {
+  if (!temPapel(sessao, ["admin"]) && acao.empresa_id !== sessao.empresaId) {
     return { erro: "Você não tem acesso a esta ação.", valores };
   }
 
@@ -190,8 +191,8 @@ export async function excluirPlanoAcao(
   _anterior: EstadoPlanoAcao,
   formData: FormData,
 ): Promise<EstadoPlanoAcao> {
-  const sessao = await getSessao();
-  if (sessao.role !== "admin") return { erro: "Apenas administradores podem excluir ações." };
+  const sessao = await exigirSessao();
+  if (!temPapel(sessao, ["admin"])) return { erro: "Apenas administradores podem excluir ações." };
   const id = String(formData.get("id") ?? "").trim();
   const { data: acao } = await supabaseAdmin
     .from("planos_acao")

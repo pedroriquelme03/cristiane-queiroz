@@ -3,15 +3,14 @@
 import { redirect } from "next/navigation";
 
 import { segmentoExiste } from "@/app/(app)/admin/segmentos/acoes";
-import { getSessao } from "@/lib/sessao";
+import { exigirAdmin } from "@/lib/autorizacao";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
 export async function criarEmpresa(
   _prevState: { error: string },
   formData: FormData,
 ) {
-  const sessao = await getSessao();
-  if (sessao.role !== "admin") throw new Error("Não autorizado");
+  await exigirAdmin();
 
   const razao_social = formData.get("razao_social") as string;
   const nome_fantasia = formData.get("nome_fantasia") as string;

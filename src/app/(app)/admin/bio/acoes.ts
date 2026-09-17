@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { getSessao } from "@/lib/sessao";
+import { exigirSessao, temPapel } from "@/lib/autorizacao";
 import { supabaseConfigurado } from "@/lib/supabase/config";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { esquemaBio } from "@/lib/validacao/bio";
@@ -32,8 +32,8 @@ function errosPorCampo(issues: { path: PropertyKey[]; message: string }[]) {
 }
 
 async function garantirAdmin(): Promise<string | null> {
-  const sessao = await getSessao();
-  return sessao.role === "admin" ? null : "Apenas administradores podem editar a bio.";
+  const sessao = await exigirSessao();
+  return temPapel(sessao, ["admin"]) ? null : "Apenas administradores podem editar a bio.";
 }
 
 /** Salva os textos, o WhatsApp, a foto e as listas de serviços e links. */

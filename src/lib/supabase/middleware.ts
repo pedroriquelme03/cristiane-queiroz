@@ -55,12 +55,20 @@ const ROTAS_RECURSO: { prefixo: string; recurso: RecursoPlano }[] = [
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
 
-  // Enquanto o projeto Supabase nao esta provisionado a plataforma roda com
-  // dados de exemplo e sem login. Remover assim que as chaves existirem.
+  // Sem as chaves do Supabase não há como autenticar ninguém. Em produção isso
+  // seria um bypass total da proteção de rotas, então falhamos FECHADO: nenhuma
+  // rota é servida. Em desenvolvimento mantemos o modo demonstração (sem login)
+  // para rodar com dados de exemplo enquanto o projeto não está provisionado.
   if (
     !process.env.NEXT_PUBLIC_SUPABASE_URL ||
     !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   ) {
+    if (process.env.NODE_ENV === "production") {
+      return new NextResponse(
+        "Serviço temporariamente indisponível: autenticação não configurada.",
+        { status: 503 },
+      );
+    }
     return response;
   }
 

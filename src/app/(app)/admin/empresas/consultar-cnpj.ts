@@ -1,5 +1,6 @@
 "use server";
 
+import { obterIpCliente, verificarRateLimit } from "@/lib/rate-limit";
 import type { Segmento } from "@/lib/types";
 
 export type DadosCnpj = {
@@ -21,6 +22,18 @@ export async function consultarCnpj(cnpjInformado: string): Promise<ResultadoCnp
   const cnpj = cnpjInformado.replace(/\D/g, "");
   if (!/^\d{14}$/.test(cnpj)) {
     return { ok: false, erro: "Informe os 14 dígitos do CNPJ." };
+  }
+
+  // A action encaminha para APIs públicas de terceiros; limitar por IP evita
+  // que ela vire um proxy de varredura e estoure a cota desses provedores.
+  const ip = await obterIpCliente();
+  const limite = await verificarRateLimit({
+    chave: `cnpj:${ip}`,
+    max: 20,
+    janelaSegundos: 60,
+  });
+  if (!limite.permitido) {
+    return { ok: false, erro: "Muitas consultas seguidas. Aguarde alguns segundos." };
   }
   if (!cnpjValido(cnpj)) {
     return { ok: false, erro: "CNPJ inválido. Confira os dígitos e tente de novo." };

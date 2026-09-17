@@ -2,8 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 
+import { resolverEmpresaAlvo } from "@/lib/autorizacao";
 import { parseData, parseValor } from "@/lib/importacao/parsers";
-import { getSessao, type Sessao } from "@/lib/sessao";
+import { type Sessao } from "@/lib/sessao";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { supabaseConfigurado } from "@/lib/supabase/config";
 import { esquemaLancamento, esquemaTitulo, statusDoTitulo } from "@/lib/validacao/financeiro";
@@ -33,14 +34,14 @@ function valoresEnviados(formData: FormData) {
 }
 
 async function contextoFinanceiro(formData: FormData) {
-  const sessao = await getSessao();
-  if (sessao.role !== "admin" && sessao.role !== "cliente") {
-    return { erro: "Seu perfil não pode alterar dados financeiros." } as const;
-  }
+  const alvo = await resolverEmpresaAlvo(String(formData.get("empresaId") ?? ""), {
+    papeis: ["admin", "cliente"],
+    negado: "Seu perfil não pode alterar dados financeiros.",
+    semEmpresa: "Selecione uma empresa antes de continuar.",
+  });
+  if ("erro" in alvo) return alvo;
+  const { sessao, empresaId } = alvo;
 
-  const empresaInformada = String(formData.get("empresaId") ?? "").trim();
-  const empresaId = sessao.role === "admin" ? empresaInformada : sessao.empresaId;
-  if (!empresaId) return { erro: "Selecione uma empresa antes de continuar." } as const;
   if (!supabaseConfigurado || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return { erro: "O Supabase não está configurado para gravação." } as const;
   }

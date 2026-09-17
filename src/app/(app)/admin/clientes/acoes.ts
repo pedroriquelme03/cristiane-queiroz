@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { getSessao } from "@/lib/sessao";
+import { exigirAdmin as exigirAdminAutorizacao } from "@/lib/autorizacao";
 import { createClient } from "@/lib/supabase/server";
 
 function somenteDigitos(valor: string) {
@@ -16,9 +16,7 @@ function validarDocumento(documento: string): { ok: true; tipo: "cpf" | "cnpj" }
 }
 
 async function exigirAdmin() {
-  const sessao = await getSessao();
-  if (sessao.role !== "admin") throw new Error("Acesso negado.");
-  return sessao;
+  return exigirAdminAutorizacao("Acesso negado.");
 }
 
 export async function cadastrarClienteConsultoria(
