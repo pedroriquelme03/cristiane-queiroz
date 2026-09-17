@@ -41,7 +41,7 @@ export const BIO_PADRAO: BioPerfil = {
   tagline:
     "Gestão financeira que vira decisão pro seu negócio crescer com clareza.",
   whatsapp: "5545999316874",
-  fotoUrl: null,
+  fotoUrl: "/bio/cristiane-queiroz.jpg",
   ativo: true,
   servicos: [
     {
@@ -95,12 +95,6 @@ export const BIO_PADRAO: BioPerfil = {
       texto: "Conheça a consultoria e a plataforma",
       url: "/apresentacao",
     },
-    {
-      icone: "login",
-      titulo: "Área do cliente",
-      texto: "Acesse o sistema de gestão financeira",
-      url: "/login",
-    },
   ],
 };
 
@@ -140,7 +134,8 @@ function lerLinks(bruto: unknown): BioLink[] {
       texto: String(l.texto ?? ""),
       url: String(l.url ?? ""),
     }))
-    .filter((l) => l.titulo && l.url);
+    .filter((l) => l.titulo && l.url)
+    .filter((l) => l.url !== "/login" && l.titulo !== "Área do cliente");
 }
 
 /**
@@ -165,7 +160,7 @@ export async function getBioPerfil(): Promise<BioPerfil> {
       subtitulo: data.subtitulo ?? BIO_PADRAO.subtitulo,
       tagline: data.tagline ?? BIO_PADRAO.tagline,
       whatsapp: data.whatsapp ?? BIO_PADRAO.whatsapp,
-      fotoUrl: data.foto_url ?? null,
+      fotoUrl: data.foto_url || BIO_PADRAO.fotoUrl,
       servicos: lerServicos(data.servicos),
       links: lerLinks(data.links),
       ativo: data.ativo ?? true,

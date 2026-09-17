@@ -41,8 +41,7 @@ values (
   ]'::jsonb,
   '[
     {"icone":"instagram","titulo":"Instagram","texto":"@cristianequeirozconsultoria","url":"https://www.instagram.com/cristianequeirozconsultoria/"},
-    {"icone":"globe","titulo":"Site e planos","texto":"Conheça a consultoria e a plataforma","url":"/apresentacao"},
-    {"icone":"login","titulo":"Área do cliente","texto":"Acesse o sistema de gestão financeira","url":"/login"}
+    {"icone":"globe","titulo":"Site e planos","texto":"Conheça a consultoria e a plataforma","url":"/apresentacao"}
   ]'::jsonb
 );
 

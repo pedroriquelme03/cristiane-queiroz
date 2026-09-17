@@ -43,7 +43,7 @@ export default async function BioPage() {
                 alt={perfil.nome}
                 width={112}
                 height={112}
-                className="size-[6.2rem] rounded-full object-cover"
+                className="size-[6.2rem] rounded-full object-cover object-[center_18%]"
                 priority
                 unoptimized
               />
