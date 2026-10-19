@@ -6,7 +6,13 @@ import { LinkGerarRelatorio } from "@/components/relatorios/link-gerar-relatorio
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Kpi } from "@/components/ui/kpi";
 import { getClientesConsultoria } from "@/lib/dados-clientes";
-import { agruparContasFixas, getPlanoContas, getTitulos, statusEfetivo } from "@/lib/dados";
+import {
+  agruparContasFixas,
+  getContasBancarias,
+  getPlanoContas,
+  getTitulos,
+  statusEfetivo,
+} from "@/lib/dados";
 import { moeda, percentual } from "@/lib/format";
 import { getSessao } from "@/lib/sessao";
 
@@ -19,9 +25,10 @@ export default async function ContasAReceberPage({
   const empresaId = typeof empresa === "string" ? empresa : undefined;
   const empresaIdAtiva = sessao.role === "admin" ? empresaId : sessao.empresaId;
   const podeEditar = Boolean(empresaIdAtiva) && (sessao.role === "admin" || sessao.role === "cliente");
-  const [titulos, contas, clientesConsultoria] = await Promise.all([
+  const [titulos, contas, contasBancarias, clientesConsultoria] = await Promise.all([
     getTitulos("receber", empresaIdAtiva),
     getPlanoContas(empresaIdAtiva),
+    getContasBancarias(empresaIdAtiva),
     sessao.role === "admin" ? getClientesConsultoria() : Promise.resolve([]),
   ]);
   const opcoesClientes = clientesConsultoria.map(({ nome, documento, valorMensal }) => ({
@@ -107,6 +114,7 @@ export default async function ContasAReceberPage({
             tipo="receber"
             rotuloContraparte="Cliente"
             contas={contas}
+            contasBancarias={contasBancarias}
             empresaId={empresaIdAtiva}
             podeEditar={podeEditar}
           />
@@ -120,7 +128,14 @@ export default async function ContasAReceberPage({
             descricao="Títulos vencidos — acionar a régua de cobrança"
           />
           <CardBody className="px-0 py-0">
-            <TabelaTitulos titulos={vencidos} rotuloContraparte="Cliente" contas={contas} empresaId={empresaIdAtiva} podeEditar={podeEditar} />
+            <TabelaTitulos
+              titulos={vencidos}
+              rotuloContraparte="Cliente"
+              contas={contas}
+              contasBancarias={contasBancarias}
+              empresaId={empresaIdAtiva}
+              podeEditar={podeEditar}
+            />
           </CardBody>
         </Card>
       ) : null}
@@ -137,7 +152,14 @@ export default async function ContasAReceberPage({
           }
         />
         <CardBody className="px-0 py-0">
-          <TabelaTitulos titulos={abertos} rotuloContraparte="Cliente" contas={contas} empresaId={empresaIdAtiva} podeEditar={podeEditar} />
+          <TabelaTitulos
+            titulos={abertos}
+            rotuloContraparte="Cliente"
+            contas={contas}
+            contasBancarias={contasBancarias}
+            empresaId={empresaIdAtiva}
+            podeEditar={podeEditar}
+          />
         </CardBody>
       </Card>
 
@@ -173,7 +195,14 @@ export default async function ContasAReceberPage({
       <Card>
         <CardHeader titulo="Histórico de recebimentos" descricao="Títulos já liquidados" />
         <CardBody className="px-0 py-0">
-          <TabelaTitulos titulos={recebidos} rotuloContraparte="Cliente" contas={contas} empresaId={empresaIdAtiva} podeEditar={podeEditar} />
+          <TabelaTitulos
+            titulos={recebidos}
+            rotuloContraparte="Cliente"
+            contas={contas}
+            contasBancarias={contasBancarias}
+            empresaId={empresaIdAtiva}
+            podeEditar={podeEditar}
+          />
         </CardBody>
       </Card>
     </>

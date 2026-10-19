@@ -19,16 +19,21 @@ import type {
   Alerta,
   AvaliacaoMaturidade,
   Colaborador,
+  ConferenciaDre,
   ContaBancaria,
   DashboardKpis,
   Diagnostico,
   Documento,
   Empresa,
+  ExtratoConta,
+  HistoricoDiagnostico,
   HistoricoPlanoAcao,
   Indicador,
+  ItemForaDre,
   Lancamento,
   LinhaDre,
   MovimentoDre,
+  MovimentoExtrato,
   PlanoAcao,
   PlanoConta,
   PontoFluxo,
@@ -234,22 +239,214 @@ export async function getContasBancarias(empresaIdParam?: string): Promise<Conta
   if (!empresaId) return [];
 
   const supabase = await criarSupabaseObrigatorio();
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from("contas_bancarias")
-    .select("id, nome, banco, tipo, saldo_inicial, ativo")
+    .select("id, nome, banco, tipo, saldo_inicial, data_saldo_inicial, ativo")
     .eq("empresa_id", empresaId)
     .eq("ativo", true)
     .order("nome");
 
+  if (error && /data_saldo_inicial/i.test(error.message)) {
+    const fallback = await supabase
+      .from("contas_bancarias")
+      .select("id, nome, banco, tipo, saldo_inicial, ativo")
+      .eq("empresa_id", empresaId)
+      .eq("ativo", true)
+      .order("nome");
+    data = (fallback.data ?? []).map((row) => ({
+      ...row,
+      data_saldo_inicial: hoje(),
+    }));
+    error = fallback.error;
+  }
+
   if (error) throw new Error("Nao foi possivel carregar as contas bancarias.");
-  return (data ?? []).map((row) => ({
-    id: row.id,
-    nome: row.nome,
-    banco: row.banco,
-    tipo: row.tipo as ContaBancaria["tipo"],
-    saldoInicial: Number(row.saldo_inicial),
-    ativo: Boolean(row.ativo),
-  }));
+
+  const contas = data ?? [];
+  if (contas.length === 0) return [];
+
+  let movimentosQuery = await supabase
+    .from("lancamentos")
+    .select("conta_bancaria_id, tipo, valor, data, impacta_fluxo")
+    .eq("empresa_id", empresaId)
+    .not("conta_bancaria_id", "is", null);
+  if (movimentosQuery.error && /impacta_fluxo/i.test(movimentosQuery.error.message)) {
+    movimentosQuery = await supabase
+      .from("lancamentos")
+      .select("conta_bancaria_id, tipo, valor, data")
+      .eq("empresa_id", empresaId)
+      .not("conta_bancaria_id", "is", null);
+  }
+
+  const movimentoPorConta = new Map<string, number>();
+  for (const mov of movimentosQuery.data ?? []) {
+    if (!mov.conta_bancaria_id) continue;
+    if ("impacta_fluxo" in mov && mov.impacta_fluxo === false) continue;
+    const conta = contas.find((c) => c.id === mov.conta_bancaria_id);
+    const dataRef = conta?.data_saldo_inicial
+      ? dataIso(conta.data_saldo_inicial)
+      : "0000-01-01";
+    if (dataIso(mov.data) < dataRef) continue;
+    const sinal = mov.tipo === "entrada" ? 1 : -1;
+    movimentoPorConta.set(
+      mov.conta_bancaria_id,
+      (movimentoPorConta.get(mov.conta_bancaria_id) ?? 0) + sinal * numero(mov.valor),
+    );
+  }
+
+  return contas.map((row) => {
+    const saldoInicial = Number(row.saldo_inicial);
+    return {
+      id: row.id,
+      nome: row.nome,
+      banco: row.banco,
+      tipo: row.tipo as ContaBancaria["tipo"],
+      saldoInicial,
+      dataSaldoInicial: dataIso(row.data_saldo_inicial) || hoje(),
+      saldoAtual: saldoInicial + (movimentoPorConta.get(row.id) ?? 0),
+      ativo: Boolean(row.ativo),
+    };
+  });
+}
+
+/**
+ * Extrato de uma conta financeira no período.
+ * Usa a mesma regra de saldo de `getContasBancarias` (saldo_inicial + movimentos
+ * com impacta_fluxo, a partir de data_saldo_inicial, na conta).
+ */
+export async function getExtratoConta(
+  contaId: string,
+  inicio: string,
+  fim: string,
+  empresaIdParam?: string,
+): Promise<ExtratoConta | null> {
+  const empresaId = await resolverEmpresaId(empresaIdParam);
+  if (!empresaId || !contaId) return null;
+
+  const contas = await getContasBancarias(empresaId);
+  const conta = contas.find((item) => item.id === contaId);
+  if (!conta) return null;
+
+  const supabase = await criarSupabaseObrigatorio();
+  const selecao =
+    "id, data, tipo, valor, descricao, contraparte, documento, plano_conta_id, conta_bancaria_id, origem, impacta_dre, impacta_fluxo";
+  let { data, error } = await supabase
+    .from("lancamentos")
+    .select(selecao)
+    .eq("empresa_id", empresaId)
+    .eq("conta_bancaria_id", contaId)
+    .gte("data", conta.dataSaldoInicial)
+    .lte("data", fim)
+    .order("data", { ascending: true })
+    .order("id", { ascending: true });
+
+  if (error && /impacta_/i.test(error.message)) {
+    const fallback = await supabase
+      .from("lancamentos")
+      .select(
+        "id, data, tipo, valor, descricao, contraparte, documento, plano_conta_id, conta_bancaria_id, origem",
+      )
+      .eq("empresa_id", empresaId)
+      .eq("conta_bancaria_id", contaId)
+      .gte("data", conta.dataSaldoInicial)
+      .lte("data", fim)
+      .order("data", { ascending: true })
+      .order("id", { ascending: true });
+    data = fallback.data as typeof data;
+    error = fallback.error;
+  }
+
+  if (error) throw new Error("Nao foi possivel carregar o extrato da conta.");
+
+  const todos = (data ?? [])
+    .map((row) => mapLancamento({ ...row, conta_bancaria_id: row.conta_bancaria_id ?? contaId }))
+    .filter((item) => item.impactaFluxo);
+
+  let saldoAnterior = conta.saldoInicial;
+  const noPeriodo: Lancamento[] = [];
+  for (const mov of todos) {
+    if (mov.data < inicio) {
+      saldoAnterior += mov.tipo === "entrada" ? mov.valor : -mov.valor;
+      continue;
+    }
+    if (mov.data > fim) continue;
+    noPeriodo.push(mov);
+  }
+
+  const entradas = noPeriodo
+    .filter((item) => item.tipo === "entrada")
+    .reduce((soma, item) => soma + item.valor, 0);
+  const saidas = noPeriodo
+    .filter((item) => item.tipo === "saida")
+    .reduce((soma, item) => soma + item.valor, 0);
+  const saldoFinal = saldoAnterior + entradas - saidas;
+
+  // Saldo independente até o fim do período (mesma fonte dos saldos financeiros).
+  const saldoAteFim = todos
+    .filter((item) => item.data <= fim)
+    .reduce(
+      (saldo, item) => saldo + (item.tipo === "entrada" ? item.valor : -item.valor),
+      conta.saldoInicial,
+    );
+  const conferido =
+    Math.abs(saldoFinal - (saldoAnterior + entradas - saidas)) < 0.005 &&
+    Math.abs(saldoFinal - saldoAteFim) < 0.005;
+
+  const ids = noPeriodo.map((item) => item.id);
+  const origemPorLancamento = new Map<string, { tituloId: string; tituloTipo: Titulo["tipo"] }>();
+  if (ids.length > 0) {
+    const { data: baixas, error: erroBaixas } = await supabase
+      .from("titulos_baixas")
+      .select("lancamento_id, titulo_id")
+      .eq("empresa_id", empresaId)
+      .in("lancamento_id", ids)
+      .not("lancamento_id", "is", null);
+
+    if (!erroBaixas && baixas?.length) {
+      const tituloIds = [...new Set(baixas.map((b) => b.titulo_id).filter(Boolean))] as string[];
+      const tipoPorTitulo = new Map<string, Titulo["tipo"]>();
+      if (tituloIds.length) {
+        const { data: titulos } = await supabase
+          .from("titulos")
+          .select("id, tipo")
+          .eq("empresa_id", empresaId)
+          .in("id", tituloIds);
+        for (const titulo of titulos ?? []) {
+          tipoPorTitulo.set(titulo.id, titulo.tipo === "receber" ? "receber" : "pagar");
+        }
+      }
+      for (const baixa of baixas) {
+        if (!baixa.lancamento_id || !baixa.titulo_id) continue;
+        origemPorLancamento.set(baixa.lancamento_id, {
+          tituloId: baixa.titulo_id,
+          tituloTipo: tipoPorTitulo.get(baixa.titulo_id) ?? "pagar",
+        });
+      }
+    }
+  }
+
+  const movimentos: MovimentoExtrato[] = [...noPeriodo]
+    .sort((a, b) => b.data.localeCompare(a.data) || b.id.localeCompare(a.id))
+    .map((item) => {
+      const origem = origemPorLancamento.get(item.id);
+      return {
+        ...item,
+        tituloId: origem?.tituloId ?? null,
+        tituloTipo: origem?.tituloTipo ?? null,
+      };
+    });
+
+  return {
+    conta,
+    inicio,
+    fim,
+    saldoAnterior,
+    entradas,
+    saidas,
+    saldoFinal,
+    conferido,
+    movimentos,
+  };
 }
 
 /** Modelos de importação da empresa e os globais (empresa_id nulo). */
@@ -606,18 +803,31 @@ export async function getPrevistoPeriodo(
   if (!empresaId) return vazio;
 
   const supabase = await criarSupabaseObrigatorio();
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from("titulos")
-    .select("id, tipo, valor, valor_pago, vencimento, contraparte, fixa, documento")
+    .select("id, tipo, valor, valor_pago, vencimento, contraparte, fixa, documento, impacta_fluxo")
     .eq("empresa_id", empresaId)
     .in("status", ["aberto", "parcial"])
     .lte("vencimento", fim)
     .order("vencimento");
 
+  if (error && /impacta_/i.test(error.message)) {
+    const fallback = await supabase
+      .from("titulos")
+      .select("id, tipo, valor, valor_pago, vencimento, contraparte, fixa, documento")
+      .eq("empresa_id", empresaId)
+      .in("status", ["aberto", "parcial"])
+      .lte("vencimento", fim)
+      .order("vencimento");
+    data = fallback.data;
+    error = fallback.error;
+  }
+
   if (error) throw new Error("Nao foi possivel carregar titulos previstos.");
 
   const total = { ...vazio, titulosNoMes: [] as typeof vazio.titulosNoMes };
   for (const row of data ?? []) {
+    if (row.impacta_fluxo === false) continue;
     const saldo = numero(row.valor) - numero(row.valor_pago);
     if (saldo <= 0) continue;
     const vencimento = dataIso(row.vencimento);
@@ -699,13 +909,28 @@ export async function getLancamentos(
   if (!empresaId) return [];
 
   const supabase = await criarSupabaseObrigatorio();
-  const { data, error } = await supabase
+  const selecao =
+    "id, data, tipo, valor, descricao, contraparte, documento, plano_conta_id, origem, impacta_dre, impacta_fluxo";
+  let { data, error } = await supabase
     .from("lancamentos")
-    .select("id, data, tipo, valor, descricao, contraparte, documento, plano_conta_id, origem")
+    .select(selecao)
     .eq("empresa_id", empresaId)
     .gte("data", inicio)
     .lte("data", fim)
     .order("data", { ascending: false });
+
+  // Compatível enquanto a migration 0025 não foi aplicada.
+  if (error && /impacta_/i.test(error.message)) {
+    const fallback = await supabase
+      .from("lancamentos")
+      .select("id, data, tipo, valor, descricao, contraparte, documento, plano_conta_id, origem")
+      .eq("empresa_id", empresaId)
+      .gte("data", inicio)
+      .lte("data", fim)
+      .order("data", { ascending: false });
+    data = fallback.data;
+    error = fallback.error;
+  }
 
   if (error) throw new Error("Nao foi possivel carregar lancamentos.");
   return (data ?? []).map(mapLancamento);
@@ -717,10 +942,9 @@ export async function getTitulos(tipo: Titulo["tipo"], empresaIdParam?: string):
 
   const supabase = await criarSupabaseObrigatorio();
   const selecao =
-    "id, tipo, contraparte, documento, emissao, vencimento, valor, valor_pago, data_pagamento, status, plano_conta_id, origem, fixa, grupo_fixa_id";
-  // `data` pode vir do select completo ou dos fallbacks sem fixa/grupo_fixa_id
-  // (enquanto as migrations 0014/0015 nao foram aplicadas). mapTitulo trata as
-  // colunas ausentes, entao tipamos com fixa/grupo_fixa_id opcionais.
+    "id, tipo, contraparte, documento, emissao, vencimento, valor, valor_pago, data_pagamento, status, plano_conta_id, origem, fixa, grupo_fixa_id, impacta_dre, impacta_fluxo";
+  // `data` pode vir do select completo ou dos fallbacks sem colunas novas
+  // (enquanto migrations nao foram aplicadas). mapTitulo trata colunas ausentes.
   type TituloRow = Parameters<typeof mapTitulo>[0];
   let data: TituloRow[] | null;
   let error: { message: string } | null;
@@ -731,6 +955,19 @@ export async function getTitulos(tipo: Titulo["tipo"], empresaIdParam?: string):
     .eq("tipo", tipo)
     .order("vencimento"));
 
+  // Compatível enquanto a migration 0025 não foi aplicada.
+  if (error && /impacta_/i.test(error.message)) {
+    const semImpacto = await supabase
+      .from("titulos")
+      .select(
+        "id, tipo, contraparte, documento, emissao, vencimento, valor, valor_pago, data_pagamento, status, plano_conta_id, origem, fixa, grupo_fixa_id",
+      )
+      .eq("empresa_id", empresaId)
+      .eq("tipo", tipo)
+      .order("vencimento");
+    data = semImpacto.data;
+    error = semImpacto.error;
+  }
   // Compatível enquanto as migrations 0014/0015 não foram aplicadas.
   if (error && /grupo_fixa/i.test(error.message)) {
     const comFixa = await supabase
@@ -783,6 +1020,8 @@ export async function getDre(
       .eq("empresa_id", empresaId)
       .eq("ativo", true)
       .order("codigo"),
+    // Coluna "Orçado" da DRE: somente valores persistidos em `orcamentos`
+    // (mesmo cadastro de Financeiro → Orçamento). Não usa títulos em aberto.
     supabase
       .from("orcamentos")
       .select("plano_conta_id, valor_previsto, competencia")
@@ -791,13 +1030,13 @@ export async function getDre(
       .lte("competencia", fim),
     supabase
       .from("titulos")
-      .select("id, tipo, valor, emissao, vencimento, plano_conta_id, status")
+      .select("id, tipo, valor, emissao, vencimento, plano_conta_id, status, impacta_dre")
       .eq("empresa_id", empresaId)
       .neq("status", "cancelado")
       .not("plano_conta_id", "is", null),
     supabase
       .from("lancamentos")
-      .select("id, tipo, valor, data, plano_conta_id, origem")
+      .select("id, tipo, valor, data, plano_conta_id, origem, impacta_dre")
       .eq("empresa_id", empresaId)
       .gte("data", inicio)
       .lte("data", fim)
@@ -807,13 +1046,41 @@ export async function getDre(
 
   if (erroContas) throw new Error("Nao foi possivel carregar o plano de contas da DRE.");
   if (erroOrcamentos) throw new Error("Nao foi possivel carregar o orçamento da DRE.");
-  if (erroTitulos) throw new Error("Nao foi possivel carregar os títulos da DRE.");
-  if (erroLancamentos) throw new Error("Nao foi possivel carregar os lançamentos da DRE.");
+  // Compatível se a migration 0025 ainda não existir: refaz sem impacta_dre.
+  let titulosDre = titulos;
+  let lancamentosDre = lancamentos;
+  if (erroTitulos && /impacta_/i.test(erroTitulos.message)) {
+    const retry = await supabase
+      .from("titulos")
+      .select("id, tipo, valor, emissao, vencimento, plano_conta_id, status")
+      .eq("empresa_id", empresaId)
+      .neq("status", "cancelado")
+      .not("plano_conta_id", "is", null);
+    if (retry.error) throw new Error("Nao foi possivel carregar os títulos da DRE.");
+    titulosDre = retry.data;
+  } else if (erroTitulos) {
+    throw new Error("Nao foi possivel carregar os títulos da DRE.");
+  }
+  if (erroLancamentos && /impacta_/i.test(erroLancamentos.message)) {
+    const retry = await supabase
+      .from("lancamentos")
+      .select("id, tipo, valor, data, plano_conta_id, origem")
+      .eq("empresa_id", empresaId)
+      .gte("data", inicio)
+      .lte("data", fim)
+      .neq("origem", "integracao")
+      .not("plano_conta_id", "is", null);
+    if (retry.error) throw new Error("Nao foi possivel carregar os lançamentos da DRE.");
+    lancamentosDre = retry.data;
+  } else if (erroLancamentos) {
+    throw new Error("Nao foi possivel carregar os lançamentos da DRE.");
+  }
 
   const realizadoPorConta = new Map<string, number>();
   const previstoPorConta = new Map<string, number>();
 
-  for (const titulo of titulos ?? []) {
+  for (const titulo of titulosDre ?? []) {
+    if ("impacta_dre" in titulo && titulo.impacta_dre === false) continue;
     const competencia = dataIso(titulo.emissao) || dataIso(titulo.vencimento);
     if (!competencia || competencia < inicio || competencia > fim) continue;
     if (!titulo.plano_conta_id) continue;
@@ -824,7 +1091,8 @@ export async function getDre(
     );
   }
 
-  for (const lancamento of lancamentos ?? []) {
+  for (const lancamento of lancamentosDre ?? []) {
+    if ("impacta_dre" in lancamento && lancamento.impacta_dre === false) continue;
     if (!lancamento.plano_conta_id) continue;
     const sinal = lancamento.tipo === "entrada" ? 1 : -1;
     realizadoPorConta.set(
@@ -841,7 +1109,7 @@ export async function getDre(
     );
   }
 
-  return (contas ?? []).map((conta) => ({
+  const linhas: LinhaDre[] = (contas ?? []).map((conta) => ({
     planoContaId: conta.id,
     codigo: conta.codigo,
     conta: conta.nome,
@@ -850,12 +1118,158 @@ export async function getDre(
     realizado: realizadoPorConta.get(conta.id) ?? 0,
     previsto: previstoPorConta.get(conta.id) ?? 0,
   }));
+
+  // Classificações inativas com realizado no período: mantêm o total (não somem da DRE).
+  const idsAtivos = new Set(linhas.map((linha) => linha.planoContaId));
+  const orfaos = [...realizadoPorConta.entries()].filter(
+    ([id, valor]) => !idsAtivos.has(id) && Math.abs(valor) >= 0.005,
+  );
+  if (orfaos.length > 0) {
+    const { data: inativas } = await supabase
+      .from("plano_contas")
+      .select("id, codigo, nome, tipo, grupo_dre")
+      .eq("empresa_id", empresaId)
+      .in(
+        "id",
+        orfaos.map(([id]) => id),
+      );
+    for (const conta of inativas ?? []) {
+      linhas.push({
+        planoContaId: conta.id,
+        codigo: conta.codigo,
+        conta: `${conta.nome} (inativa)`,
+        grupoDre: (conta.grupo_dre as LinhaDre["grupoDre"]) || "outros",
+        tipo: conta.tipo as LinhaDre["tipo"],
+        realizado: realizadoPorConta.get(conta.id) ?? 0,
+        previsto: previstoPorConta.get(conta.id) ?? 0,
+        inativa: true,
+      });
+      idsAtivos.add(conta.id);
+    }
+    for (const [id, valor] of orfaos) {
+      if (idsAtivos.has(id)) continue;
+      linhas.push({
+        planoContaId: id,
+        codigo: "—",
+        conta: "Classificação removida",
+        grupoDre: "outros",
+        tipo: "despesa",
+        realizado: valor,
+        previsto: previstoPorConta.get(id) ?? 0,
+        inativa: true,
+      });
+    }
+  }
+
+  return linhas.sort((a, b) => a.codigo.localeCompare(b.codigo, "pt-BR"));
+}
+
+/**
+ * Confere se o Realizado das linhas bate com a soma assinada dos movimentos de origem.
+ * Regra: entrada soma, saída subtrai (igual a getDre).
+ */
+export function conferirRealizadoDre(
+  linhas: LinhaDre[],
+  movimentos: MovimentoDre[],
+): ConferenciaDre {
+  const realizadoLinhas = linhas.reduce((soma, linha) => soma + linha.realizado, 0);
+  const porContaLinha = new Map(linhas.map((linha) => [linha.planoContaId, linha.realizado]));
+  const porContaMov = new Map<string, number>();
+  let realizadoMovimentos = 0;
+  for (const movimento of movimentos) {
+    const sinal = movimento.tipo === "entrada" ? 1 : -1;
+    const valor = sinal * movimento.valor;
+    realizadoMovimentos += valor;
+    if (!movimento.planoContaId) continue;
+    porContaMov.set(
+      movimento.planoContaId,
+      (porContaMov.get(movimento.planoContaId) ?? 0) + valor,
+    );
+  }
+
+  const divergenciasPorConta: ConferenciaDre["divergenciasPorConta"] = [];
+  const ids = new Set([...porContaLinha.keys(), ...porContaMov.keys()]);
+  for (const id of ids) {
+    const linha = porContaLinha.get(id) ?? 0;
+    const movs = porContaMov.get(id) ?? 0;
+    if (Math.abs(linha - movs) >= 0.005) {
+      divergenciasPorConta.push({ planoContaId: id, linha, movimentos: movs });
+    }
+  }
+
+  return {
+    realizadoLinhas,
+    realizadoMovimentos,
+    conferido:
+      Math.abs(realizadoLinhas - realizadoMovimentos) < 0.005 && divergenciasPorConta.length === 0,
+    divergenciasPorConta,
+  };
+}
+
+/**
+ * Lançamentos que aparecem no fluxo de caixa do período e não entram na DRE —
+ * por regra (baixa / só caixa / sem classificação), não por inclusão automática.
+ */
+export async function getLancamentosForaDaDre(
+  inicio: string,
+  fim: string,
+  empresaIdParam?: string,
+): Promise<ItemForaDre[]> {
+  const empresaId = await resolverEmpresaId(empresaIdParam);
+  if (!empresaId) return [];
+
+  const supabase = await criarSupabaseObrigatorio();
+  const selecao =
+    "id, data, tipo, valor, descricao, plano_conta_id, origem, impacta_dre, impacta_fluxo";
+  let { data, error } = await supabase
+    .from("lancamentos")
+    .select(selecao)
+    .eq("empresa_id", empresaId)
+    .gte("data", inicio)
+    .lte("data", fim)
+    .order("data", { ascending: false });
+
+  if (error && /impacta_/i.test(error.message)) {
+    const fallback = await supabase
+      .from("lancamentos")
+      .select("id, data, tipo, valor, descricao, plano_conta_id, origem")
+      .eq("empresa_id", empresaId)
+      .gte("data", inicio)
+      .lte("data", fim)
+      .order("data", { ascending: false });
+    data = fallback.data as typeof data;
+    error = fallback.error;
+  }
+  if (error) throw new Error("Nao foi possivel diagnosticar lançamentos fora da DRE.");
+
+  const fora: ItemForaDre[] = [];
+  for (const row of data ?? []) {
+    if ("impacta_fluxo" in row && row.impacta_fluxo === false) continue;
+
+    let motivo: ItemForaDre["motivo"] | null = null;
+    if (row.origem === "integracao") motivo = "baixa_titulo";
+    else if ("impacta_dre" in row && row.impacta_dre === false) motivo = "marcado_sem_dre";
+    else if (!row.plano_conta_id) motivo = "sem_classificacao";
+
+    if (!motivo) continue;
+    fora.push({
+      id: row.id,
+      data: dataIso(row.data),
+      descricao: row.descricao ?? "Lançamento",
+      valor: numero(row.valor),
+      tipo: row.tipo === "entrada" ? "entrada" : "saida",
+      motivo,
+    });
+  }
+  return fora;
 }
 
 /**
  * Movimentos que formam o Realizado da DRE no período:
- * títulos pela data de emissão (+ vencimento se emissão vazia) e lançamentos manuais/importados.
- * Baixas de títulos (origem integração) ficam de fora para não duplicar.
+ * - Títulos: competência = emissão (fallback vencimento), se impacta_dre e tem classificação.
+ * - Lançamentos manuais/importados: data do lançamento, se impacta_dre e tem classificação.
+ * Baixas de títulos (origem integração) ficam de fora de propósito — o título já entra na DRE
+ * na competência; o pagamento entra só no fluxo de caixa.
  */
 export async function getMovimentosDre(
   inicio: string,
@@ -870,13 +1284,15 @@ export async function getMovimentosDre(
     await Promise.all([
       supabase
         .from("titulos")
-        .select("id, tipo, valor, emissao, vencimento, plano_conta_id, status, contraparte, documento, fixa")
+        .select(
+          "id, tipo, valor, emissao, vencimento, plano_conta_id, status, contraparte, documento, fixa, impacta_dre",
+        )
         .eq("empresa_id", empresaId)
         .neq("status", "cancelado")
         .not("plano_conta_id", "is", null),
       supabase
         .from("lancamentos")
-        .select("id, tipo, valor, data, plano_conta_id, origem, descricao, contraparte")
+        .select("id, tipo, valor, data, plano_conta_id, origem, descricao, contraparte, impacta_dre")
         .eq("empresa_id", empresaId)
         .gte("data", inicio)
         .lte("data", fim)
@@ -884,12 +1300,41 @@ export async function getMovimentosDre(
         .not("plano_conta_id", "is", null),
     ]);
 
-  if (erroTitulos) throw new Error("Nao foi possivel carregar os títulos da DRE.");
-  if (erroLancamentos) throw new Error("Nao foi possivel carregar os lançamentos da DRE.");
+  let titulosMov = titulos;
+  let lancamentosMov = lancamentos;
+  if (erroTitulos && /impacta_/i.test(erroTitulos.message)) {
+    const retry = await supabase
+      .from("titulos")
+      .select(
+        "id, tipo, valor, emissao, vencimento, plano_conta_id, status, contraparte, documento, fixa",
+      )
+      .eq("empresa_id", empresaId)
+      .neq("status", "cancelado")
+      .not("plano_conta_id", "is", null);
+    if (retry.error) throw new Error("Nao foi possivel carregar os títulos da DRE.");
+    titulosMov = retry.data;
+  } else if (erroTitulos) {
+    throw new Error("Nao foi possivel carregar os títulos da DRE.");
+  }
+  if (erroLancamentos && /impacta_/i.test(erroLancamentos.message)) {
+    const retry = await supabase
+      .from("lancamentos")
+      .select("id, tipo, valor, data, plano_conta_id, origem, descricao, contraparte")
+      .eq("empresa_id", empresaId)
+      .gte("data", inicio)
+      .lte("data", fim)
+      .neq("origem", "integracao")
+      .not("plano_conta_id", "is", null);
+    if (retry.error) throw new Error("Nao foi possivel carregar os lançamentos da DRE.");
+    lancamentosMov = retry.data;
+  } else if (erroLancamentos) {
+    throw new Error("Nao foi possivel carregar os lançamentos da DRE.");
+  }
 
   const movimentos: MovimentoDre[] = [];
 
-  for (const titulo of titulos ?? []) {
+  for (const titulo of titulosMov ?? []) {
+    if ("impacta_dre" in titulo && titulo.impacta_dre === false) continue;
     const data = dataIso(titulo.emissao) || dataIso(titulo.vencimento);
     if (!data || data < inicio || data > fim) continue;
     const tipo = titulo.tipo === "receber" ? "entrada" : "saida";
@@ -912,7 +1357,8 @@ export async function getMovimentosDre(
     });
   }
 
-  for (const lancamento of lancamentos ?? []) {
+  for (const lancamento of lancamentosMov ?? []) {
+    if ("impacta_dre" in lancamento && lancamento.impacta_dre === false) continue;
     movimentos.push({
       id: lancamento.id,
       data: dataIso(lancamento.data),
@@ -997,11 +1443,30 @@ export async function getPlanosAcao(_empresaId?: string): Promise<PlanoAcao[]> {
   if (!empresaId) return [];
 
   const supabase = await criarSupabaseObrigatorio();
-  const { data, error } = await supabase
+  const selecao =
+    "id, problema, acao, area, responsavel, prazo, prioridade, status, percentual, impacto_estimado, data_inicio_efetiva, data_conclusao_efetiva";
+  let { data, error } = await supabase
     .from("planos_acao")
-    .select("id, problema, acao, area, responsavel, prazo, prioridade, status, percentual, impacto_estimado")
+    .select(selecao)
     .eq("empresa_id", empresaId)
     .order("prazo");
+
+  // Compatível enquanto a migration 0028 não foi aplicada.
+  if (error && /data_inicio_efetiva|data_conclusao_efetiva/i.test(error.message)) {
+    const fallback = await supabase
+      .from("planos_acao")
+      .select(
+        "id, problema, acao, area, responsavel, prazo, prioridade, status, percentual, impacto_estimado",
+      )
+      .eq("empresa_id", empresaId)
+      .order("prazo");
+    data = (fallback.data ?? []).map((row) => ({
+      ...row,
+      data_inicio_efetiva: null,
+      data_conclusao_efetiva: null,
+    })) as typeof data;
+    error = fallback.error;
+  }
 
   if (error) throw new Error("Nao foi possivel carregar planos de acao.");
   return (data ?? []).map(mapPlanoAcao);
@@ -1038,14 +1503,90 @@ export async function getDiagnosticos(_empresaId?: string): Promise<Diagnostico[
   if (!empresaId) return [];
 
   const supabase = await criarSupabaseObrigatorio();
-  const { data, error } = await supabase
+  const selecaoCompleta =
+    "id, competencia, observacoes, created_at, updated_at, diagnostico_itens(id, categoria, nota, observacao, realizado, data_realizacao, progresso, updated_at)";
+  let { data, error } = await supabase
     .from("diagnosticos")
-    .select("competencia, observacoes, diagnostico_itens(categoria, nota, observacao)")
+    .select(selecaoCompleta)
     .eq("empresa_id", empresaId)
     .order("competencia");
 
+  // Compatível enquanto a migration 0029 não foi aplicada.
+  if (error && /realizado|progresso|data_realizacao|updated_at/i.test(error.message)) {
+    const fallback = await supabase
+      .from("diagnosticos")
+      .select("id, competencia, observacoes, created_at, diagnostico_itens(id, categoria, nota, observacao)")
+      .eq("empresa_id", empresaId)
+      .order("competencia");
+    if (fallback.error && /id|created_at/i.test(fallback.error.message)) {
+      const legado = await supabase
+        .from("diagnosticos")
+        .select("competencia, observacoes, diagnostico_itens(categoria, nota, observacao)")
+        .eq("empresa_id", empresaId)
+        .order("competencia");
+      data = (legado.data ?? []).map((row, indice) => ({
+        id: `legado-${indice}`,
+        competencia: row.competencia,
+        observacoes: row.observacoes,
+        created_at: null,
+        updated_at: null,
+        diagnostico_itens: (row.diagnostico_itens ?? []).map((item, i) => ({
+          id: `legado-item-${indice}-${i}`,
+          categoria: item.categoria,
+          nota: item.nota,
+          observacao: item.observacao,
+          realizado: null,
+          data_realizacao: null,
+          progresso: 0,
+          updated_at: null,
+        })),
+      })) as typeof data;
+      error = legado.error;
+    } else {
+      data = (fallback.data ?? []).map((row) => ({
+        ...row,
+        updated_at: row.created_at ?? null,
+        diagnostico_itens: (row.diagnostico_itens ?? []).map((item) => ({
+          ...item,
+          id: item.id ?? `${row.id}-${item.categoria}`,
+          realizado: null,
+          data_realizacao: null,
+          progresso: 0,
+          updated_at: null,
+        })),
+      })) as typeof data;
+      error = fallback.error;
+    }
+  }
+
   if (error) throw new Error("Nao foi possivel carregar diagnosticos.");
   return (data ?? []).map(mapDiagnostico);
+}
+
+export async function getHistoricoDiagnostico(
+  _empresaId?: string,
+): Promise<HistoricoDiagnostico[]> {
+  const empresaId = await resolverEmpresaId(_empresaId);
+  if (!empresaId) return [];
+
+  const supabase = await criarSupabaseObrigatorio();
+  const { data, error } = await supabase
+    .from("diagnostico_historico")
+    .select("id, diagnostico_id, diagnostico_item_id, tipo, descricao, autor_nome, created_at")
+    .eq("empresa_id", empresaId)
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  if (error) return [];
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    diagnosticoId: row.diagnostico_id,
+    diagnosticoItemId: row.diagnostico_item_id,
+    tipo: row.tipo as HistoricoDiagnostico["tipo"],
+    descricao: row.descricao,
+    autorNome: row.autor_nome,
+    criadoEm: row.created_at,
+  }));
 }
 
 export async function getMaturidade(_empresaId?: string): Promise<AvaliacaoMaturidade[]> {
@@ -1311,7 +1852,10 @@ function mapLancamento(row: {
   contraparte: string | null;
   documento: string | null;
   plano_conta_id: string | null;
+  conta_bancaria_id?: string | null;
   origem: Lancamento["origem"];
+  impacta_dre?: boolean | null;
+  impacta_fluxo?: boolean | null;
 }): Lancamento {
   return {
     id: row.id,
@@ -1322,7 +1866,10 @@ function mapLancamento(row: {
     contraparte: row.contraparte,
     documento: row.documento,
     planoContaId: row.plano_conta_id,
+    contaBancariaId: row.conta_bancaria_id ?? null,
     origem: row.origem,
+    impactaDre: row.impacta_dre !== false,
+    impactaFluxo: row.impacta_fluxo !== false,
   };
 }
 
@@ -1341,6 +1888,8 @@ function mapTitulo(row: {
   origem: Titulo["origem"];
   fixa?: boolean | null;
   grupo_fixa_id?: string | null;
+  impacta_dre?: boolean | null;
+  impacta_fluxo?: boolean | null;
 }): Titulo {
   return {
     id: row.id,
@@ -1357,6 +1906,8 @@ function mapTitulo(row: {
     origem: row.origem,
     fixa: Boolean(row.fixa),
     grupoFixaId: row.grupo_fixa_id ?? null,
+    impactaDre: row.impacta_dre !== false,
+    impactaFluxo: row.impacta_fluxo !== false,
   };
 }
 
@@ -1425,6 +1976,8 @@ function mapPlanoAcao(row: {
   status: PlanoAcao["status"];
   percentual: number;
   impacto_estimado: number | string | null;
+  data_inicio_efetiva?: string | null;
+  data_conclusao_efetiva?: string | null;
 }): PlanoAcao {
   return {
     id: row.id,
@@ -1437,25 +1990,50 @@ function mapPlanoAcao(row: {
     status: row.status,
     percentual: row.percentual,
     impactoEstimado: row.impacto_estimado === null ? null : numero(row.impacto_estimado),
+    dataInicioEfetiva: row.data_inicio_efetiva ? dataIso(row.data_inicio_efetiva) : null,
+    dataConclusaoEfetiva: row.data_conclusao_efetiva
+      ? dataIso(row.data_conclusao_efetiva)
+      : null,
   };
 }
 
+function mapProgressoDiagnostico(valor: number | null | undefined): Diagnostico["itens"][number]["progresso"] {
+  if (valor === 30 || valor === 50 || valor === 100) return valor;
+  return 0;
+}
+
 function mapDiagnostico(row: {
+  id?: string;
   competencia: string;
   observacoes: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
   diagnostico_itens?: {
+    id?: string;
     categoria: Diagnostico["itens"][number]["categoria"];
     nota: number;
     observacao: string | null;
+    realizado?: string | null;
+    data_realizacao?: string | null;
+    progresso?: number | null;
+    updated_at?: string | null;
   }[];
 }): Diagnostico {
   return {
+    id: row.id ?? "",
     competencia: dataIso(row.competencia),
     observacoes: row.observacoes ?? "",
+    criadoEm: row.created_at ?? null,
+    atualizadoEm: row.updated_at ?? row.created_at ?? null,
     itens: (row.diagnostico_itens ?? []).map((item) => ({
+      id: item.id ?? "",
       categoria: item.categoria,
       nota: item.nota,
       observacao: item.observacao ?? "",
+      realizado: item.realizado ?? "",
+      dataRealizacao: item.data_realizacao ? dataIso(item.data_realizacao) : null,
+      progresso: mapProgressoDiagnostico(item.progresso),
+      atualizadoEm: item.updated_at ?? null,
     })),
   };
 }

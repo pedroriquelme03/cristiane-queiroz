@@ -91,6 +91,7 @@ export const ABAS_CLIENTES = [
 /** Abas da tela Financeiro. */
 export const ABAS_FINANCEIRO: { href: string; rotulo: string; recurso: RecursoPlano }[] = [
   { href: "/financeiro/fluxo-de-caixa", rotulo: "Fluxo de caixa", recurso: "financeiro-basico" },
+  { href: "/financeiro/extrato", rotulo: "Extrato", recurso: "financeiro-basico" },
   { href: "/financeiro/contas-a-pagar", rotulo: "Contas a pagar", recurso: "financeiro-basico" },
   { href: "/financeiro/contas-a-receber", rotulo: "Contas a receber", recurso: "financeiro-basico" },
   { href: "/financeiro/receitas", rotulo: "Análise de receitas", recurso: "financeiro-avancado" },

@@ -118,7 +118,7 @@ function ColunaRubricas({
                       title={podeEditar ? "Clique para inverter" : undefined}
                       className={cn(
                         "inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[11px] font-medium",
-                        soma ? "bg-brand-soft text-foreground" : "bg-negative-soft text-negative",
+                        soma ? "bg-brand-soft text-brand" : "bg-negative-soft text-negative",
                         efeito === "ignora" && "bg-surface-muted text-muted-foreground",
                         podeEditar ? "cursor-pointer" : "cursor-default",
                       )}
@@ -240,8 +240,8 @@ export function CustoDaFolha({
             />
           ) : null}
           <div className="flex items-center justify-between bg-brand-soft px-5 py-3">
-            <span className="font-semibold text-foreground">TOTAL CUSTO</span>
-            <span className="text-base font-semibold text-foreground tabular">{moeda(custo.totalCusto)}</span>
+            <span className="font-semibold text-brand">TOTAL CUSTO</span>
+            <span className="text-base font-semibold text-brand tabular">{moeda(custo.totalCusto)}</span>
           </div>
         </div>
         {comFiltro ? (
@@ -435,7 +435,7 @@ export function TabelaFuncionariosFolha({ funcionarios }: { funcionarios: Funcio
                     <td className="px-3 py-2 text-right tabular whitespace-nowrap">
                       {f.salario === null ? "—" : moeda(f.salario)}
                     </td>
-                    <td className="px-3 py-2 text-right text-serie-saldo tabular whitespace-nowrap">{moeda(f.proventos)}</td>
+                    <td className="px-3 py-2 text-right text-brand tabular whitespace-nowrap">{moeda(f.proventos)}</td>
                     <td className="px-3 py-2 text-right text-negative tabular whitespace-nowrap">{moeda(f.descontos)}</td>
                     <td className="px-3 py-2 text-right font-semibold tabular whitespace-nowrap">{moeda(f.liquido)}</td>
                     <td className="px-3 py-2 text-right text-muted-foreground tabular whitespace-nowrap">{moeda(f.baseInss)}</td>

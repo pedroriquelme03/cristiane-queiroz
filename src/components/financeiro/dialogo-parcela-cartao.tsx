@@ -5,10 +5,14 @@ import Link from "next/link";
 import { CreditCard } from "lucide-react";
 
 import { salvarTitulo, type EstadoFormulario } from "@/app/(app)/financeiro/acoes";
-import { Aviso, Rodape } from "@/components/financeiro/dialogo-lancamento";
+import { Aviso, CamposImpacto, Rodape } from "@/components/financeiro/dialogo-lancamento";
 import { CampoSelect, CampoTexto } from "@/components/ui/campo";
 import { CampoMoeda } from "@/components/ui/campo-moeda";
 import { Modal } from "@/components/ui/modal";
+import {
+  opcoesSelectClassificacao,
+  TIPOS_CLASSIFICACAO_PAGAR,
+} from "@/lib/plano-contas-padrao";
 import type { PlanoConta } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -62,9 +66,7 @@ export function DialogoParcelaCartao({
     return Array.from({ length: 6 }, (_, i) => String(atual - 1 + i));
   }, []);
 
-  const contasUteis = contas.filter((conta) =>
-    ["despesa", "custo", "investimento", "deducao"].includes(conta.tipo),
-  );
+  const contasUteis = contas.filter((conta) => TIPOS_CLASSIFICACAO_PAGAR.includes(conta.tipo));
   const hrefPlano = empresaId
     ? `/cadastros/plano-de-contas?empresa=${empresaId}`
     : "/cadastros/plano-de-contas";
@@ -155,14 +157,10 @@ export function DialogoParcelaCartao({
                 name="planoContaId"
                 rotulo="Categoria"
                 required
-                opcoes={[
-                  { valor: "", rotulo: "Selecione a classificação" },
-                  ...contasUteis.map((conta) => ({
-                    valor: conta.id,
-                    rotulo: conta.nome,
-                    detalhe: conta.codigo,
-                  })),
-                ]}
+                opcoes={opcoesSelectClassificacao(contasUteis, {
+                  placeholder: "Selecione a classificação",
+                  tipos: TIPOS_CLASSIFICACAO_PAGAR,
+                })}
                 pesquisavel
                 defaultValue={estado.valores?.planoContaId ?? contasUteis[0]?.id}
                 erro={estado.campos?.planoContaId}
@@ -186,6 +184,23 @@ export function DialogoParcelaCartao({
               erro={estado.campos?.documento}
             />
           </div>
+
+          <CamposImpacto
+            sufixo="cartao"
+            impactaDrePadrao={
+              estado.valores?.impactaDre !== undefined
+                ? estado.valores.impactaDre === "on" || estado.valores.impactaDre === "true"
+                : true
+            }
+            impactaFluxoPadrao={
+              estado.valores?.impactaFluxo !== undefined
+                ? estado.valores.impactaFluxo === "on" || estado.valores.impactaFluxo === "true"
+                : true
+            }
+            erro={estado.campos?.impactaDre}
+            dicaDre="Competência pelo mês da fatura"
+            dicaFluxo="Entra no fluxo pelo vencimento da fatura"
+          />
 
           <Rodape onCancelar={() => setAberto(false)} texto="Salvar parcela" />
         </form>

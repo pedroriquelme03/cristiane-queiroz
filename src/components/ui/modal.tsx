@@ -76,7 +76,9 @@ export function Modal({
           <X className="size-4" aria-hidden />
         </button>
       </header>
-      <div className="max-h-[calc(90dvh-73px)] overflow-y-auto rounded-b-xl px-5 py-4">{children}</div>
+      <div className="max-h-[calc(90dvh-73px)] overflow-y-auto overscroll-contain rounded-b-xl px-5 py-4">
+        {children}
+      </div>
     </dialog>
   );
 }

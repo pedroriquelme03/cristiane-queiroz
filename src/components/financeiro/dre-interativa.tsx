@@ -63,6 +63,11 @@ export function RegistrosGrupoInterativos({
       {contas.map((conta) => {
         const desvio = conta.realizado - conta.previsto;
         const itens = movimentosDaConta(conta.planoContaId);
+        const somaOrigem = itens.reduce(
+          (soma, item) => soma + (item.tipo === "entrada" ? item.valor : -item.valor),
+          0,
+        );
+        const origemConfere = Math.abs(somaOrigem - conta.realizado) < 0.005;
         const expansivel = itens.length > 0;
         const aberta = abertas.has(conta.planoContaId);
 
@@ -75,6 +80,8 @@ export function RegistrosGrupoInterativos({
             expansivel={expansivel}
             aberta={aberta}
             movimentos={itens}
+            origemConfere={origemConfere}
+            somaOrigem={somaOrigem}
             onAlternar={() => alternar(conta.planoContaId)}
           />
         );
@@ -90,6 +97,8 @@ function ContaComDetalhe({
   expansivel,
   aberta,
   movimentos,
+  origemConfere,
+  somaOrigem,
   onAlternar,
 }: {
   conta: LinhaDre;
@@ -98,8 +107,17 @@ function ContaComDetalhe({
   expansivel: boolean;
   aberta: boolean;
   movimentos: MovimentoDre[];
+  origemConfere: boolean;
+  somaOrigem: number;
   onAlternar: () => void;
 }) {
+  const rotuloOrigem = (origem: string) => {
+    if (origem === "titulo") return "título · emissão";
+    if (origem === "manual") return "lançamento · data";
+    if (origem === "importacao") return "importação · data";
+    return origem;
+  };
+
   return (
     <>
       <tr className="border-b border-border last:border-0">
@@ -121,16 +139,34 @@ function ContaComDetalhe({
               <span>
                 <span className="tabular text-xs text-muted-foreground">{conta.codigo}</span>{" "}
                 {conta.conta}
+                {conta.inativa ? (
+                  <span className="ml-1 text-xs text-warning">inativa</span>
+                ) : null}
               </span>
             </button>
           ) : (
             <span className="flex items-center gap-1.5 pl-5">
               <span className="tabular text-xs text-muted-foreground">{conta.codigo}</span>{" "}
               {conta.conta}
+              {conta.inativa ? (
+                <span className="ml-1 text-xs text-warning">inativa</span>
+              ) : null}
             </span>
           )}
         </th>
-        <td className="tabular px-3 py-2 text-right">{moeda(conta.realizado)}</td>
+        <td
+          className={cn(
+            "tabular px-3 py-2 text-right",
+            !origemConfere && expansivel && "text-warning",
+          )}
+          title={
+            origemConfere
+              ? undefined
+              : `Linha ${moeda(conta.realizado)} ≠ origens ${moeda(somaOrigem)}`
+          }
+        >
+          {moeda(conta.realizado)}
+        </td>
         <td className="tabular px-3 py-2 text-right text-muted-foreground">
           {percentual(av)}
         </td>
@@ -161,13 +197,11 @@ function ContaComDetalhe({
                 </span>
                 <span className="mx-2 text-border">·</span>
                 <span>{movimento.descricao}</span>
-                {movimento.contraparte || movimento.origem ? (
-                  <span className="mt-0.5 block text-xs text-muted-foreground">
-                    {[movimento.contraparte, movimento.origem === "titulo" ? "emissão" : null]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </span>
-                ) : null}
+                <span className="mt-0.5 block text-xs text-muted-foreground">
+                  {[movimento.contraparte, rotuloOrigem(movimento.origem)]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </span>
               </td>
               <td
                 className={cn(
@@ -182,6 +216,14 @@ function ContaComDetalhe({
             </tr>
           ))
         : null}
+      {aberta && !origemConfere ? (
+        <tr className="border-b border-border bg-warning/5 last:border-0">
+          <td className="px-12 py-2 text-xs text-warning" colSpan={5}>
+            Soma das origens ({moeda(somaOrigem)}) difere do realizado da linha (
+            {moeda(conta.realizado)}).
+          </td>
+        </tr>
+      ) : null}
     </>
   );
 }

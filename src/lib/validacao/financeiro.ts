@@ -57,16 +57,29 @@ const textoOpcional = z
   .optional()
   .transform((v) => (v === "" ? undefined : v));
 
-export const esquemaLancamento = z.object({
-  data: dataIso,
-  tipo: z.enum(["entrada", "saida"], { message: "Selecione entrada ou saída" }),
-  // valor > 0 no banco: o sinal é carregado pelo tipo, nunca pelo número
-  valor: valorMonetario.refine((v) => v > 0, "O valor deve ser maior que zero"),
-  descricao: z.string().trim().min(1, "Informe a descrição").max(200),
-  contraparte: textoOpcional,
-  documento: textoOpcional,
-  planoContaId: z.string().trim().min(1, "Selecione a classificação"),
-});
+/** Checkbox HTML: ausente = false; "on"/"true" = true. */
+const checkboxForm = z
+  .union([z.literal("on"), z.literal("true"), z.literal("false"), z.literal("")])
+  .optional()
+  .transform((v) => v === "on" || v === "true");
+
+export const esquemaLancamento = z
+  .object({
+    data: dataIso,
+    tipo: z.enum(["entrada", "saida"], { message: "Selecione entrada ou saída" }),
+    // valor > 0 no banco: o sinal é carregado pelo tipo, nunca pelo número
+    valor: valorMonetario.refine((v) => v > 0, "O valor deve ser maior que zero"),
+    descricao: z.string().trim().min(1, "Informe a descrição").max(200),
+    contraparte: textoOpcional,
+    documento: textoOpcional,
+    planoContaId: z.string().trim().min(1, "Selecione a classificação"),
+    impactaDre: checkboxForm,
+    impactaFluxo: checkboxForm,
+  })
+  .refine((d) => d.impactaDre || d.impactaFluxo, {
+    message: "Marque pelo menos DRE ou fluxo de caixa",
+    path: ["impactaDre"],
+  });
 
 export const esquemaTitulo = z
   .object({
@@ -91,10 +104,9 @@ export const esquemaTitulo = z
       .refine((v) => v >= 0, "O valor pago não pode ser negativo"),
     documento: textoOpcional,
     planoContaId: z.string().trim().min(1, "Selecione a classificação"),
-    fixa: z
-      .union([z.literal("on"), z.literal("true"), z.literal("false"), z.literal("")])
-      .optional()
-      .transform((v) => v === "on" || v === "true"),
+    fixa: checkboxForm,
+    impactaDre: checkboxForm,
+    impactaFluxo: checkboxForm,
     mesesRecorrencia: z
       .string()
       .trim()
@@ -113,6 +125,10 @@ export const esquemaTitulo = z
   .refine((t) => !t.emissao || t.emissao <= t.vencimento, {
     message: "A emissão não pode ser depois do vencimento",
     path: ["emissao"],
+  })
+  .refine((t) => t.impactaDre || t.impactaFluxo, {
+    message: "Marque pelo menos DRE ou fluxo de caixa",
+    path: ["impactaDre"],
   });
 
 export type DadosLancamento = z.infer<typeof esquemaLancamento>;

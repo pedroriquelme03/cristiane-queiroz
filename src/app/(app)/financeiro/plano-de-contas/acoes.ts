@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { resolverEmpresaAlvo } from "@/lib/autorizacao";
-import { PLANO_CONTAS_PADRAO } from "@/lib/plano-contas-padrao";
+import { PLANO_CONTAS_PADRAO, proximoCodigoConta } from "@/lib/plano-contas-padrao";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { supabaseConfigurado } from "@/lib/supabase/config";
 import type { GrupoDre, PlanoConta } from "@/lib/types";
@@ -34,6 +34,21 @@ function revalidar() {
   revalidatePath("/financeiro/plano-de-contas");
   revalidatePath("/financeiro/contas-a-pagar");
   revalidatePath("/financeiro/contas-a-receber");
+  revalidatePath("/financeiro/fluxo-de-caixa");
+  revalidatePath("/financeiro/dre");
+  revalidatePath("/financeiro/orcamento");
+  revalidatePath("/financeiro/relatorios", "layout");
+}
+
+async function gerarCodigoSequencial(empresaId: string, grupoDre: GrupoDre) {
+  const { data, error } = await supabaseAdmin
+    .from("plano_contas")
+    .select("codigo")
+    .eq("empresa_id", empresaId)
+    .eq("grupo_dre", grupoDre);
+
+  if (error) return { erro: "Não foi possível gerar o código da classificação." } as const;
+  return { codigo: proximoCodigoConta(grupoDre, (data ?? []).map((row) => row.codigo)) } as const;
 }
 
 export async function salvarContaPlano(
@@ -44,13 +59,11 @@ export async function salvarContaPlano(
   if ("erro" in contexto) return { erro: contexto.erro };
 
   const id = String(formData.get("id") ?? "").trim();
-  const codigo = String(formData.get("codigo") ?? "").trim();
   const nome = String(formData.get("nome") ?? "").trim();
   const tipo = String(formData.get("tipo") ?? "") as PlanoConta["tipo"];
   const grupoDre = String(formData.get("grupoDre") ?? "") as GrupoDre;
   const campos: Record<string, string> = {};
 
-  if (!codigo) campos.codigo = "Informe o código.";
   if (!nome) campos.nome = "Informe o nome da conta.";
   if (!["receita", "deducao", "custo", "despesa", "investimento", "nao_operacional"].includes(tipo)) {
     campos.tipo = "Selecione o tipo.";
@@ -73,32 +86,50 @@ export async function salvarContaPlano(
   }
   if (Object.keys(campos).length) return { campos };
 
-  const registro = {
-    codigo,
-    nome,
-    tipo,
-    grupo_dre: grupoDre,
-    ativo: true,
-  };
-
   if (id) {
+    // Edição: código sequencial permanece; só atualiza nome/tipo/grupo.
     const { error } = await supabaseAdmin
       .from("plano_contas")
-      .update(registro)
+      .update({
+        nome,
+        tipo,
+        grupo_dre: grupoDre,
+        ativo: true,
+      })
       .eq("id", id)
       .eq("empresa_id", contexto.empresaId);
-    if (error) {
-      if (error.code === "23505") return { campos: { codigo: "Já existe uma conta com este código." } };
-      return { erro: "Não foi possível atualizar a conta." };
-    }
+    if (error) return { erro: "Não foi possível atualizar a conta." };
   } else {
+    const gerado = await gerarCodigoSequencial(contexto.empresaId, grupoDre);
+    if ("erro" in gerado) return { erro: gerado.erro };
+
     const { error } = await supabaseAdmin.from("plano_contas").insert({
-      ...registro,
+      codigo: gerado.codigo,
+      nome,
+      tipo,
+      grupo_dre: grupoDre,
+      ativo: true,
       empresa_id: contexto.empresaId,
     });
     if (error) {
-      if (error.code === "23505") return { campos: { codigo: "Já existe uma conta com este código." } };
-      return { erro: "Não foi possível salvar a conta." };
+      if (error.code === "23505") {
+        // Concorrência rara: tenta um código a mais.
+        const retry = await gerarCodigoSequencial(contexto.empresaId, grupoDre);
+        if ("erro" in retry) return { erro: retry.erro };
+        const segunda = await supabaseAdmin.from("plano_contas").insert({
+          codigo: retry.codigo,
+          nome,
+          tipo,
+          grupo_dre: grupoDre,
+          ativo: true,
+          empresa_id: contexto.empresaId,
+        });
+        if (segunda.error) {
+          return { erro: "Não foi possível salvar a conta (código em uso)." };
+        }
+      } else {
+        return { erro: "Não foi possível salvar a conta." };
+      }
     }
   }
 

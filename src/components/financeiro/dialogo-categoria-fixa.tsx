@@ -12,6 +12,11 @@ import {
 import { Aviso, Rodape } from "@/components/financeiro/dialogo-lancamento";
 import { CampoSelect, CampoTexto } from "@/components/ui/campo";
 import { Modal } from "@/components/ui/modal";
+import {
+  opcoesSelectClassificacao,
+  TIPOS_CLASSIFICACAO_PAGAR,
+  TIPOS_CLASSIFICACAO_RECEBER,
+} from "@/lib/plano-contas-padrao";
 import type { PlanoConta, Titulo } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -101,11 +106,8 @@ export function DialogoEditarCategoriaFixa({
     }
   }, [estado, router]);
 
-  const contasUteis = contas.filter((conta) =>
-    tipo === "pagar"
-      ? ["despesa", "custo", "investimento", "deducao"].includes(conta.tipo)
-      : ["receita"].includes(conta.tipo),
-  );
+  const tiposUteis = tipo === "pagar" ? TIPOS_CLASSIFICACAO_PAGAR : TIPOS_CLASSIFICACAO_RECEBER;
+  const contasUteis = contas.filter((conta) => tiposUteis.includes(conta.tipo));
 
   return (
     <>
@@ -138,14 +140,10 @@ export function DialogoEditarCategoriaFixa({
             required
             pesquisavel
             defaultValue={grupo.titulo.planoContaId ?? contasUteis[0]?.id ?? ""}
-            opcoes={[
-              { valor: "", rotulo: "Selecione a classificação" },
-              ...contasUteis.map((conta) => ({
-                valor: conta.id,
-                rotulo: conta.nome,
-                detalhe: conta.codigo,
-              })),
-            ]}
+            opcoes={opcoesSelectClassificacao(contasUteis, {
+              placeholder: "Selecione a classificação",
+              tipos: tiposUteis,
+            })}
             erro={estado.campos?.planoContaId}
           />
           <Rodape onCancelar={() => setAberto(false)} texto="Salvar categoria" />

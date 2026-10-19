@@ -35,7 +35,7 @@ export default async function RelatorioDrePage({
   return (
     <PainelRelatorio
       titulo="Relatório da DRE gerencial"
-      descricao="Realizado pela data de emissão, com orçado e desvio por classificação."
+      descricao="Regime de competência: títulos pela emissão; lançamentos manuais/importados pela data; baixas de pagamento ficam de fora (só fluxo de caixa)."
       voltarHref={comEmpresa("/financeiro/relatorios", empresaId)}
       resumoFiltros={textoResumoFiltros({ ...filtros, campoData: "emissao" }, intervalo, contas)}
       nomeArquivo="relatorio-dre"

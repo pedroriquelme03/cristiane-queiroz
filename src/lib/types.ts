@@ -79,6 +79,10 @@ export interface ContaBancaria {
   banco: string | null;
   tipo: "corrente" | "poupanca" | "caixa" | "aplicacao";
   saldoInicial: number;
+  /** Data a partir da qual o saldo inicial vale. */
+  dataSaldoInicial: string;
+  /** Saldo atual (inicial + movimentações da conta). */
+  saldoAtual?: number;
   ativo: boolean;
 }
 
@@ -91,7 +95,33 @@ export interface Lancamento {
   contraparte: string | null;
   documento: string | null;
   planoContaId: string | null;
+  /** Conta financeira onde o movimento entrou (baixa / caixa). */
+  contaBancariaId?: string | null;
   origem: "manual" | "importacao" | "integracao";
+  /** Entra no realizado da DRE (competência pela data do lançamento). */
+  impactaDre: boolean;
+  /** Entra no fluxo de caixa e no saldo. */
+  impactaFluxo: boolean;
+}
+
+/** Linha do extrato por conta financeira, com vínculo opcional ao título de origem. */
+export interface MovimentoExtrato extends Lancamento {
+  tituloId: string | null;
+  tituloTipo: "pagar" | "receber" | null;
+}
+
+/** Extrato de uma conta no período (mesma regra de saldo das contas bancárias). */
+export interface ExtratoConta {
+  conta: ContaBancaria;
+  inicio: string;
+  fim: string;
+  saldoAnterior: number;
+  entradas: number;
+  saidas: number;
+  saldoFinal: number;
+  /** Confirma saldoAnterior + entradas − saídas = saldoFinal (e bate com saldo até o fim). */
+  conferido: boolean;
+  movimentos: MovimentoExtrato[];
 }
 
 export type StatusTitulo = "aberto" | "parcial" | "pago" | "cancelado";
@@ -113,6 +143,19 @@ export interface Titulo {
   fixa: boolean;
   /** Agrupa as parcelas geradas no mesmo cadastro de conta fixa. */
   grupoFixaId: string | null;
+  /** Entra na DRE pela competência (emissão; fallback no vencimento). */
+  impactaDre: boolean;
+  /** Saldo em aberto entra no fluxo/projeção pelo vencimento. */
+  impactaFluxo: boolean;
+}
+
+/** Pagamento/recebimento registrado em um título (parcial ou total). */
+export interface BaixaTitulo {
+  id: string;
+  tituloId: string;
+  data: string;
+  valor: number;
+  lancamentoId: string | null;
 }
 
 export interface Orcamento {
@@ -146,6 +189,10 @@ export interface PlanoAcao {
   status: StatusAcao;
   percentual: number;
   impactoEstimado: number | null;
+  /** Data em que a ação passou a em andamento (efetiva). */
+  dataInicioEfetiva: string | null;
+  /** Data em que a ação foi concluída (efetiva). */
+  dataConclusaoEfetiva: string | null;
 }
 
 export interface HistoricoPlanoAcao {
@@ -157,10 +204,39 @@ export interface HistoricoPlanoAcao {
   criadoEm: string;
 }
 
+/** Andamento da execução por área do diagnóstico (distinto da nota de avaliação). */
+export type ProgressoDiagnostico = 0 | 30 | 50 | 100;
+
+export interface DiagnosticoItem {
+  id: string;
+  categoria: AreaDiagnostico;
+  /** Nota da avaliação (0–100). Não confundir com progresso de execução. */
+  nota: number;
+  observacao: string;
+  /** O que foi realizado na área (execução). */
+  realizado: string;
+  dataRealizacao: string | null;
+  progresso: ProgressoDiagnostico;
+  atualizadoEm: string | null;
+}
+
 export interface Diagnostico {
+  id: string;
   competencia: string;
   observacoes: string;
-  itens: { categoria: AreaDiagnostico; nota: number; observacao: string }[];
+  criadoEm: string | null;
+  atualizadoEm: string | null;
+  itens: DiagnosticoItem[];
+}
+
+export interface HistoricoDiagnostico {
+  id: string;
+  diagnosticoId: string;
+  diagnosticoItemId: string | null;
+  tipo: "avaliacao" | "execucao";
+  descricao: string;
+  autorNome: string;
+  criadoEm: string;
 }
 
 export interface AvaliacaoMaturidade {
@@ -352,6 +428,8 @@ export interface LinhaDre {
   tipo: PlanoConta["tipo"];
   realizado: number;
   previsto: number;
+  /** Classificação inativa que ainda tem realizado no período (não some do total). */
+  inativa?: boolean;
 }
 
 /** Movimento que compõe o Realizado da DRE (título por emissão ou lançamento manual). */
@@ -364,4 +442,31 @@ export interface MovimentoDre {
   contraparte: string | null;
   origem: string;
   planoContaId: string | null;
+}
+
+/** Por que um lançamento de caixa não entra na DRE (não é erro automático). */
+export type MotivoForaDre =
+  | "baixa_titulo"
+  | "sem_classificacao"
+  | "marcado_sem_dre";
+
+export interface ItemForaDre {
+  id: string;
+  data: string;
+  descricao: string;
+  valor: number;
+  tipo: "entrada" | "saida";
+  motivo: MotivoForaDre;
+}
+
+/** Conferência: soma das linhas = soma assinada dos movimentos de origem. */
+export interface ConferenciaDre {
+  realizadoLinhas: number;
+  realizadoMovimentos: number;
+  conferido: boolean;
+  divergenciasPorConta: Array<{
+    planoContaId: string;
+    linha: number;
+    movimentos: number;
+  }>;
 }

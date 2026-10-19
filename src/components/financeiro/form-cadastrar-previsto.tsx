@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useMemo, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { CheckCircle2, Pencil, Plus, Trash2 } from "lucide-react";
 
@@ -14,11 +14,21 @@ import { CampoMoeda } from "@/components/ui/campo-moeda";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import type { OrcamentoLinha } from "@/lib/dados";
 import { competenciaExtenso, moeda } from "@/lib/format";
+import { opcoesSelectClassificacao, ROTULO_TIPO_CONTA } from "@/lib/plano-contas-padrao";
 import type { PlanoConta } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const ESTADO: EstadoFormulario = {};
 
+type LinhaGrade = {
+  planoContaId: string;
+  codigo: string;
+  conta: string;
+  tipo: PlanoConta["tipo"];
+  orcamento: OrcamentoLinha | null;
+};
+
+/** Cadastro e edição de valores orçados por cliente (empresa), mês e classificação. */
 export function FormCadastrarPrevistos({
   empresaId,
   competencia,
@@ -34,40 +44,80 @@ export function FormCadastrarPrevistos({
 }) {
   const [estado, acao] = useActionState(salvarPrevisto, ESTADO);
   const [editando, setEditando] = useState<OrcamentoLinha | null>(null);
+  const [contaNovaId, setContaNovaId] = useState<string | null>(null);
   const mesPadrao = competencia.slice(0, 7);
   const valor = (campo: string, padrao?: string | number | null) =>
     estado.valores?.[campo] ?? padrao ?? "";
 
   useEffect(() => {
-    if (estado.ok) setEditando(null);
+    if (estado.ok) {
+      setEditando(null);
+      setContaNovaId(null);
+    }
   }, [estado.ok]);
 
-  const opcoesContas = contas.map((conta) => ({
-    valor: conta.id,
-    rotulo: `${conta.codigo} — ${conta.nome}`,
-    detalhe: rotuloTipoConta(conta.tipo),
+  const porConta = useMemo(() => {
+    const mapa = new Map<string, OrcamentoLinha>();
+    for (const item of orcamentos) mapa.set(item.planoContaId, item);
+    return mapa;
+  }, [orcamentos]);
+
+  const grade: LinhaGrade[] = useMemo(
+    () =>
+      [...contas]
+        .sort((a, b) => a.codigo.localeCompare(b.codigo, "pt-BR"))
+        .map((conta) => ({
+          planoContaId: conta.id,
+          codigo: conta.codigo,
+          conta: conta.nome,
+          tipo: conta.tipo,
+          orcamento: porConta.get(conta.id) ?? null,
+        })),
+    [contas, porConta],
+  );
+
+  const cadastrados = grade.filter((linha) => linha.orcamento).length;
+
+  const opcoesContas = opcoesSelectClassificacao(contas).map((opcao) => ({
+    ...opcao,
+    rotulo: opcao.detalhe ? `${opcao.detalhe} — ${opcao.rotulo}` : opcao.rotulo,
+    detalhe: undefined,
   }));
+
+  function iniciarCadastro(planoContaId: string) {
+    setEditando(null);
+    setContaNovaId(planoContaId);
+  }
+
+  function iniciarEdicao(item: OrcamentoLinha) {
+    setContaNovaId(null);
+    setEditando(item);
+  }
+
+  const chaveForm = editando?.id ?? (contaNovaId ? `nova-${contaNovaId}` : "novo");
+  const planoPadrao =
+    editando?.planoContaId ?? contaNovaId ?? contas[0]?.id ?? "";
 
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,22rem)_1fr]">
       <Card>
         <CardHeader
-          titulo={editando ? "Editar previsto" : "Cadastrar previstos"}
-          descricao="Valores orçados por conta para comparar com o realizado na DRE"
+          titulo={editando ? "Editar orçado" : "Cadastrar orçado"}
+          descricao="Valor previsto por classificação no mês do cliente selecionado. Upsert evita duplicar a mesma conta no período."
         />
         <CardBody>
           {!podeEditar || !empresaId ? (
             <p className="text-sm text-muted-foreground">
               {!empresaId
-                ? "Selecione uma empresa no topo para cadastrar previstos."
+                ? "Selecione o cliente (empresa) no topo para cadastrar o orçamento."
                 : "Seu perfil não pode alterar o orçamento."}
             </p>
           ) : contas.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              Cadastre o plano de contas antes de informar os previstos.
+              Cadastre as classificações em Cadastros → Classificações antes de informar o orçado.
             </p>
           ) : (
-            <form action={acao} className="space-y-4" key={editando?.id ?? "novo"}>
+            <form action={acao} className="space-y-4" key={chaveForm}>
               <input type="hidden" name="empresaId" value={empresaId} />
               {estado.ok ? (
                 <p
@@ -75,7 +125,7 @@ export function FormCadastrarPrevistos({
                   className="flex items-center gap-2 rounded-lg bg-positive/10 px-3 py-2 text-sm text-positive"
                 >
                   <CheckCircle2 className="size-4 shrink-0" aria-hidden />
-                  Previsto salvo.
+                  Orçado salvo e persistido.
                 </p>
               ) : null}
               {estado.erro ? (
@@ -87,20 +137,22 @@ export function FormCadastrarPrevistos({
               <CampoTexto
                 id="competencia"
                 name="competencia"
-                rotulo="Mês *"
+                rotulo="Período (mês) *"
                 tipo="month"
                 required
-                defaultValue={String(valor("competencia", editando?.competencia.slice(0, 7) ?? mesPadrao))}
+                defaultValue={String(
+                  valor("competencia", editando?.competencia.slice(0, 7) ?? mesPadrao),
+                )}
                 erro={estado.campos?.competencia}
-                dica="O previsto vale para todo o mês selecionado."
+                dica="Lista e comparativos passam a usar este mês após salvar."
               />
 
               <CampoSelect
                 id="planoContaId"
                 name="planoContaId"
-                rotulo="Conta *"
+                rotulo="Categoria (classificação) *"
                 required
-                defaultValue={String(valor("planoContaId", editando?.planoContaId ?? contas[0]?.id ?? ""))}
+                defaultValue={String(valor("planoContaId", planoPadrao))}
                 opcoes={opcoesContas}
                 erro={estado.campos?.planoContaId}
               />
@@ -108,24 +160,28 @@ export function FormCadastrarPrevistos({
               <CampoMoeda
                 id="valor"
                 name="valor"
-                rotulo="Valor previsto *"
+                rotulo="Valor orçado *"
                 defaultValue={
                   editando
                     ? Math.abs(editando.valorPrevisto)
                     : Number(valor("valor", "") || 0) || undefined
                 }
                 erro={estado.campos?.valor}
+                dica="Informe o valor absoluto; o sinal na DRE segue o tipo da conta."
               />
 
               <div className="flex flex-wrap items-center gap-2">
                 <BotaoSalvar editando={Boolean(editando)} />
-                {editando ? (
+                {editando || contaNovaId ? (
                   <button
                     type="button"
-                    onClick={() => setEditando(null)}
+                    onClick={() => {
+                      setEditando(null);
+                      setContaNovaId(null);
+                    }}
                     className="rounded-lg px-3 py-2 text-sm text-muted-foreground hover:text-foreground"
                   >
-                    Cancelar edição
+                    Cancelar
                   </button>
                 ) : null}
               </div>
@@ -136,72 +192,102 @@ export function FormCadastrarPrevistos({
 
       <Card>
         <CardHeader
-          titulo="Previstos do mês"
-          descricao={`${orcamentos.length} conta${orcamentos.length === 1 ? "" : "s"} em ${competenciaExtenso(competencia)}`}
+          titulo="Orçado por categoria"
+          descricao={`${cadastrados} de ${grade.length} classificação${grade.length === 1 ? "" : "ões"} com valor em ${competenciaExtenso(competencia)}`}
         />
         <CardBody className="px-0 py-0">
-          {orcamentos.length === 0 ? (
+          {grade.length === 0 ? (
             <p className="px-5 py-10 text-center text-sm text-muted-foreground">
-              Nenhum previsto cadastrado para este mês.
+              Nenhuma classificação ativa para este cliente.
             </p>
           ) : (
             <div className="max-h-[28rem] overflow-auto">
               <table className="w-full text-sm">
                 <thead className="sticky top-0 bg-surface">
                   <tr className="border-b border-border text-xs text-muted-foreground">
-                    <th scope="col" className="px-5 py-2.5 text-left font-medium">Conta</th>
-                    <th scope="col" className="px-3 py-2.5 text-left font-medium">Tipo</th>
-                    <th scope="col" className="px-3 py-2.5 text-right font-medium">Valor previsto</th>
+                    <th scope="col" className="px-5 py-2.5 text-left font-medium">
+                      Categoria
+                    </th>
+                    <th scope="col" className="px-3 py-2.5 text-left font-medium">
+                      Tipo
+                    </th>
+                    <th scope="col" className="px-3 py-2.5 text-right font-medium">
+                      Orçado
+                    </th>
                     {podeEditar ? (
-                      <th scope="col" className="px-5 py-2.5 text-right font-medium">Ações</th>
+                      <th scope="col" className="px-5 py-2.5 text-right font-medium">
+                        Ações
+                      </th>
                     ) : null}
                   </tr>
                 </thead>
                 <tbody>
-                  {orcamentos.map((item) => (
-                    <tr key={item.id} className="border-b border-border last:border-0">
-                      <td className="px-5 py-2.5">
-                        <span className="tabular text-xs text-muted-foreground">{item.codigo}</span>{" "}
-                        {item.conta}
-                      </td>
-                      <td className="px-3 py-2.5 text-muted-foreground">
-                        {rotuloTipoConta(item.tipo)}
-                      </td>
-                      <td
-                        className={cn(
-                          "tabular px-3 py-2.5 text-right font-medium",
-                          item.valorPrevisto >= 0 ? "text-positive" : "text-negative",
-                        )}
-                      >
-                        {moeda(item.valorPrevisto)}
-                      </td>
-                      {podeEditar && empresaId ? (
+                  {grade.map((linha) => {
+                    const item = linha.orcamento;
+                    return (
+                      <tr key={linha.planoContaId} className="border-b border-border last:border-0">
                         <td className="px-5 py-2.5">
-                          <div className="flex items-center justify-end gap-3">
-                            <button
-                              type="button"
-                              onClick={() => setEditando(item)}
-                              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-                            >
-                              <Pencil className="size-3.5" aria-hidden />
-                              Editar
-                            </button>
-                            <form action={excluirPrevistoForm}>
-                              <input type="hidden" name="empresaId" value={empresaId} />
-                              <input type="hidden" name="id" value={item.id} />
-                              <button
-                                type="submit"
-                                className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-negative"
-                              >
-                                <Trash2 className="size-3.5" aria-hidden />
-                                Excluir
-                              </button>
-                            </form>
-                          </div>
+                          <span className="tabular text-xs text-muted-foreground">
+                            {linha.codigo}
+                          </span>{" "}
+                          {linha.conta}
                         </td>
-                      ) : null}
-                    </tr>
-                  ))}
+                        <td className="px-3 py-2.5 text-muted-foreground">
+                          {ROTULO_TIPO_CONTA[linha.tipo]}
+                        </td>
+                        <td
+                          className={cn(
+                            "tabular px-3 py-2.5 text-right font-medium",
+                            item
+                              ? item.valorPrevisto >= 0
+                                ? "text-positive"
+                                : "text-negative"
+                              : "text-muted-foreground",
+                          )}
+                        >
+                          {item ? moeda(item.valorPrevisto) : "—"}
+                        </td>
+                        {podeEditar && empresaId ? (
+                          <td className="px-5 py-2.5">
+                            <div className="flex items-center justify-end gap-3">
+                              {item ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => iniciarEdicao(item)}
+                                    className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                                  >
+                                    <Pencil className="size-3.5" aria-hidden />
+                                    Editar
+                                  </button>
+                                  <form action={excluirPrevistoForm}>
+                                    <input type="hidden" name="empresaId" value={empresaId} />
+                                    <input type="hidden" name="id" value={item.id} />
+                                    <button
+                                      type="submit"
+                                      className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-negative"
+                                    >
+                                      <Trash2 className="size-3.5" aria-hidden />
+                                      Excluir
+                                    </button>
+                                  </form>
+                                </>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => iniciarCadastro(linha.planoContaId)}
+                                  className="inline-flex items-center gap-1 text-xs font-medium text-brand hover:underline"
+                                >
+                                  <Plus className="size-3.5" aria-hidden />
+                                  Informar
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        ) : null}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -221,26 +307,7 @@ function BotaoSalvar({ editando }: { editando: boolean }) {
       className="inline-flex items-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-medium text-brand-foreground hover:opacity-90 disabled:opacity-50"
     >
       <Plus className="size-4" aria-hidden />
-      {pending ? "Salvando…" : editando ? "Atualizar previsto" : "Cadastrar previsto"}
+      {pending ? "Salvando…" : editando ? "Atualizar orçado" : "Salvar orçado"}
     </button>
   );
-}
-
-function rotuloTipoConta(tipo: PlanoConta["tipo"]) {
-  switch (tipo) {
-    case "receita":
-      return "Receita";
-    case "deducao":
-      return "Dedução";
-    case "custo":
-      return "Custo";
-    case "despesa":
-      return "Despesa";
-    case "investimento":
-      return "Investimento";
-    case "nao_operacional":
-      return "Não operacional";
-    default:
-      return tipo;
-  }
 }

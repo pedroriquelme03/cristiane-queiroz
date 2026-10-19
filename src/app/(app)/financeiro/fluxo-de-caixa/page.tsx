@@ -81,10 +81,11 @@ export default async function FluxoDeCaixaPage({
   const nomeConta = (id: string | null) =>
     contas.find((c) => c.id === id)?.nome ?? "Sem classificação";
 
-  const entradasRealizadas = lancamentos
+  const lancamentosNoFluxo = lancamentos.filter((item) => item.impactaFluxo);
+  const entradasRealizadas = lancamentosNoFluxo
     .filter((item) => item.tipo === "entrada")
     .reduce((soma, item) => soma + item.valor, 0);
-  const saidasRealizadas = lancamentos
+  const saidasRealizadas = lancamentosNoFluxo
     .filter((item) => item.tipo === "saida")
     .reduce((soma, item) => soma + item.valor, 0);
 
@@ -234,7 +235,7 @@ export default async function FluxoDeCaixaPage({
       <Card>
         <CardHeader
           titulo="Lançamentos do período"
-          descricao={`${lancamentos.length} movimentações realizadas em ${competenciaExtenso(competencia)}`}
+          descricao={`${lancamentos.length} movimentações na data do caixa em ${competenciaExtenso(competencia)}. Baixas de título entram só aqui (regime de caixa); a DRE usa a emissão do título.`}
           acao={podeEditar ? <DialogoLancamento contas={contas} empresaId={empresaIdAtiva} /> : null}
         />
         <CardBody className="px-0 py-0">
@@ -245,23 +246,41 @@ export default async function FluxoDeCaixaPage({
                   <th scope="col" className="px-5 py-2.5 text-left font-medium">Data</th>
                   <th scope="col" className="px-3 py-2.5 text-left font-medium">Descrição</th>
                   <th scope="col" className="px-3 py-2.5 text-left font-medium">Classificação</th>
-                  <th scope="col" className="px-3 py-2.5 text-left font-medium">Contraparte</th>
+                  <th scope="col" className="px-3 py-2.5 text-left font-medium">Impacto</th>
                   <th scope="col" className="px-5 py-2.5 text-right font-medium">Valor</th>
                   {podeEditar ? <th scope="col" className="px-5 py-2.5 text-right font-medium">Ações</th> : null}
                 </tr>
               </thead>
               <tbody>
-                {lancamentos.map((l) => (
+                {lancamentos.map((l) => {
+                  const soCaixa =
+                    l.origem === "integracao" || !l.impactaDre || !l.planoContaId;
+                  return (
                   <tr key={l.id} className="border-b border-border last:border-0">
                     <td className="tabular px-5 py-2.5 whitespace-nowrap">
                       {formatarData(l.data)}
                     </td>
-                    <td className="px-3 py-2.5">{l.descricao}</td>
+                    <td className="px-3 py-2.5">
+                      <div>{l.descricao}</div>
+                      {l.contraparte ? (
+                        <div className="text-xs text-muted-foreground">{l.contraparte}</div>
+                      ) : null}
+                    </td>
                     <td className="px-3 py-2.5 text-muted-foreground">
                       {nomeConta(l.planoContaId)}
                     </td>
-                    <td className="px-3 py-2.5 text-muted-foreground">
-                      {l.contraparte ?? "—"}
+                    <td className="px-3 py-2.5">
+                      {l.origem === "integracao" ? (
+                        <Badge tom="neutro">Baixa · só caixa</Badge>
+                      ) : soCaixa ? (
+                        <Badge tom="atencao">
+                          {!l.planoContaId ? "Sem classificação" : "Só fluxo"}
+                        </Badge>
+                      ) : l.impactaFluxo ? (
+                        <Badge tom="marca">Fluxo + DRE</Badge>
+                      ) : (
+                        <Badge tom="neutro">Só DRE</Badge>
+                      )}
                     </td>
                     <td className="px-5 py-2.5 text-right">
                       <span
@@ -283,12 +302,15 @@ export default async function FluxoDeCaixaPage({
                             <ExcluirLancamento lancamento={l} empresaId={empresaIdAtiva} />
                           </div>
                         ) : (
-                          <span className="block text-right text-xs text-muted-foreground">Baixa automática</span>
+                          <span className="block text-right text-xs text-muted-foreground">
+                            {l.origem === "integracao" ? "Ver título na DRE pela emissão" : "Importação"}
+                          </span>
                         )}
                       </td>
                     ) : null}
                   </tr>
-                ))}
+                  );
+                })}
                 {lancamentos.length === 0 ? (
                   <tr>
                     <td colSpan={podeEditar ? 6 : 5} className="px-5 py-8 text-center text-sm text-muted-foreground">

@@ -6,7 +6,7 @@ import {
 } from "@/components/financeiro/dialogo-titulo";
 import { statusEfetivo } from "@/lib/titulos";
 import { data as formatarData, diasAte, moeda } from "@/lib/format";
-import type { PlanoConta, Titulo } from "@/lib/types";
+import type { ContaBancaria, PlanoConta, Titulo } from "@/lib/types";
 
 const ROTULO: Record<string, string> = {
   aberto: "Em aberto",
@@ -37,6 +37,7 @@ export function TabelaTitulos({
   titulos,
   rotuloContraparte,
   contas = [],
+  contasBancarias = [],
   empresaId,
   podeEditar = false,
 }: {
@@ -44,6 +45,7 @@ export function TabelaTitulos({
   /** "Fornecedor" em contas a pagar, "Cliente" em contas a receber */
   rotuloContraparte: string;
   contas?: PlanoConta[];
+  contasBancarias?: ContaBancaria[];
   empresaId?: string;
   podeEditar?: boolean;
 }) {
@@ -58,6 +60,8 @@ export function TabelaTitulos({
             <th scope="col" className="px-3 py-2.5 text-left font-medium">Documento</th>
             <th scope="col" className="px-3 py-2.5 text-left font-medium">Vencimento</th>
             <th scope="col" className="px-3 py-2.5 text-left font-medium">Situação</th>
+            <th scope="col" className="px-3 py-2.5 text-right font-medium">Valor</th>
+            <th scope="col" className="px-3 py-2.5 text-right font-medium">Pago</th>
             <th scope="col" className="px-5 py-2.5 text-right font-medium">Saldo</th>
             {podeEditar ? <th scope="col" className="px-5 py-2.5 text-right font-medium">Ações</th> : null}
           </tr>
@@ -85,6 +89,12 @@ export function TabelaTitulos({
                 <td className="px-3 py-2.5">
                   <Badge tom={TOM[situacao]}>{ROTULO[situacao]}</Badge>
                 </td>
+                <td className="tabular px-3 py-2.5 text-right text-muted-foreground">
+                  {moeda(titulo.valor)}
+                </td>
+                <td className="tabular px-3 py-2.5 text-right text-muted-foreground">
+                  {moeda(titulo.valorPago)}
+                </td>
                 <td className="tabular px-5 py-2.5 text-right font-medium">
                   {moeda(titulo.valor - titulo.valorPago)}
                 </td>
@@ -92,7 +102,11 @@ export function TabelaTitulos({
                   <td className="px-5 py-2.5">
                     <div className="flex flex-wrap items-center justify-end gap-3">
                       {titulo.status !== "pago" && titulo.status !== "cancelado" ? (
-                        <DialogoBaixaTitulo titulo={titulo} empresaId={empresaId} />
+                        <DialogoBaixaTitulo
+                          titulo={titulo}
+                          empresaId={empresaId}
+                          contasBancarias={contasBancarias}
+                        />
                       ) : null}
                       <DialogoTitulo
                         tipo={titulo.tipo}
@@ -111,7 +125,7 @@ export function TabelaTitulos({
           })}
           {titulos.length === 0 ? (
             <tr>
-              <td colSpan={podeEditar ? 6 : 5} className="px-5 py-8 text-center text-sm text-muted-foreground">
+              <td colSpan={podeEditar ? 8 : 7} className="px-5 py-8 text-center text-sm text-muted-foreground">
                 Nenhum título nesta seção.
               </td>
             </tr>

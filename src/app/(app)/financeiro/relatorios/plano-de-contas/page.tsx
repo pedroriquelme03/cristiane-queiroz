@@ -3,7 +3,12 @@ import { AvisoRelatorioSemEmpresa } from "@/components/relatorios/aviso-empresa"
 import { PainelRelatorio } from "@/components/relatorios/painel-relatorio";
 import { getLancamentos, getPlanoContas, getTitulos } from "@/lib/dados";
 import { moeda } from "@/lib/format";
-import { ROTULO_TIPO_CONTA } from "@/lib/plano-contas-padrao";
+import {
+  montarSecoesPlanoContas,
+  ROTULO_TIPO_CONTA,
+  secaoDoTipoConta,
+  tituloSecaoTipoConta,
+} from "@/lib/plano-contas-padrao";
 import { carregarContextoRelatorio } from "@/lib/relatorios/contexto";
 import { CONTA_SEM_CLASSIFICACAO, comEmpresa, textoResumoFiltros } from "@/lib/relatorios/filtros";
 import { filtrarLancamentos, filtrarTitulos } from "@/lib/relatorios/titulos";
@@ -36,6 +41,10 @@ export default async function RelatorioPlanoDeContasPage({
     for (const conta of contas) ids.add(conta.id);
   }
 
+  const ordemSecao = new Map(
+    montarSecoesPlanoContas(contas, { incluirVazias: true }).map((secao, indice) => [secao.id, indice]),
+  );
+
   const linhas = [...ids]
     .map((id) => {
       const conta = id === CONTA_SEM_CLASSIFICACAO ? null : contas.find((item) => item.id === id);
@@ -47,8 +56,11 @@ export default async function RelatorioPlanoDeContasPage({
         + lancamentosDaConta.filter((item) => item.tipo === "entrada").reduce((soma, item) => soma + item.valor, 0);
       const aPagar = titulosDaConta.filter((item) => item.tipo === "pagar").reduce((soma, item) => soma + item.valor - item.valorPago, 0);
       const aReceber = titulosDaConta.filter((item) => item.tipo === "receber").reduce((soma, item) => soma + item.valor - item.valorPago, 0);
+      const secaoId = conta ? secaoDoTipoConta(conta.tipo) : "outros";
 
       return {
+        secao: conta ? tituloSecaoTipoConta(conta.tipo) : "Outros",
+        secaoOrdem: ordemSecao.get(secaoId) ?? 99,
         codigo: conta?.codigo ?? "—",
         classificacao: conta?.nome ?? "Sem classificação",
         tipo: conta ? ROTULO_TIPO_CONTA[conta.tipo] : "—",
@@ -64,7 +76,11 @@ export default async function RelatorioPlanoDeContasPage({
         ? true
         : linha.quantidade > 0 || linha.pago !== 0 || linha.recebido !== 0 || linha.aPagar !== 0 || linha.aReceber !== 0,
     )
-    .sort((a, b) => a.codigo.localeCompare(b.codigo, "pt-BR"));
+    .sort(
+      (a, b) =>
+        a.secaoOrdem - b.secaoOrdem || a.codigo.localeCompare(b.codigo, "pt-BR"),
+    )
+    .map(({ secaoOrdem: _ordem, ...linha }) => linha);
 
   return (
     <PainelRelatorio
@@ -92,6 +108,7 @@ export default async function RelatorioPlanoDeContasPage({
         },
       ]}
       colunas={[
+        { chave: "secao", rotulo: "Seção" },
         { chave: "codigo", rotulo: "Código" },
         { chave: "classificacao", rotulo: "Classificação" },
         { chave: "tipo", rotulo: "Tipo" },

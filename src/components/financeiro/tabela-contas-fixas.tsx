@@ -19,7 +19,7 @@ import {
 import { Badge, type TomBadge } from "@/components/ui/badge";
 import { type ContaFixaAgrupada, statusEfetivo } from "@/lib/titulos";
 import { data as formatarData, diasAte, moeda } from "@/lib/format";
-import type { PlanoConta, Titulo } from "@/lib/types";
+import type { ContaBancaria, PlanoConta, Titulo } from "@/lib/types";
 
 const ROTULO: Record<string, string> = {
   aberto: "Em aberto",
@@ -95,6 +95,7 @@ export function TabelaContasFixas({
   tipo,
   rotuloContraparte,
   contas = [],
+  contasBancarias = [],
   empresaId,
   podeEditar = false,
 }: {
@@ -102,6 +103,7 @@ export function TabelaContasFixas({
   tipo: Titulo["tipo"];
   rotuloContraparte: string;
   contas?: PlanoConta[];
+  contasBancarias?: ContaBancaria[];
   empresaId?: string;
   podeEditar?: boolean;
 }) {
@@ -192,7 +194,11 @@ export function TabelaContasFixas({
                   <td className="px-5 py-2.5">
                     <div className="flex flex-wrap items-center justify-end gap-3">
                       {grupo.titulo.status !== "pago" && grupo.titulo.status !== "cancelado" ? (
-                        <DialogoBaixaTitulo titulo={grupo.titulo} empresaId={empresaId} />
+                        <DialogoBaixaTitulo
+                          titulo={grupo.titulo}
+                          empresaId={empresaId}
+                          contasBancarias={contasBancarias}
+                        />
                       ) : null}
                       <DialogoEditarCategoriaFixa
                         grupo={grupo}

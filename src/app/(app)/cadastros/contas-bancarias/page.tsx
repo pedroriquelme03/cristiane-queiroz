@@ -1,12 +1,13 @@
 import {
   DialogoNovaContaBancaria,
+  EditarContaBancaria,
   RemoverContaBancaria,
 } from "@/components/cadastros/contas-bancarias-controles";
 import { AvisoSemEmpresa } from "@/components/cadastros/ui";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { getContasBancarias } from "@/lib/dados";
 import { empresaAtiva } from "@/lib/empresa-ativa";
-import { moeda } from "@/lib/format";
+import { data as formatarData, moeda } from "@/lib/format";
 import { getSessao } from "@/lib/sessao";
 
 const ROTULO_TIPO = {
@@ -34,8 +35,8 @@ export default async function CadastroContasBancariasPage({
   return (
     <Card>
       <CardHeader
-        titulo="Contas bancárias"
-        descricao="Contas e caixas usados no fluxo de caixa e nos lançamentos."
+        titulo="Contas bancárias e caixa"
+        descricao="Saldo inicial na data de referência; baixas e lançamentos atualizam o saldo atual sem duplicar o valor."
         acao={podeEditar ? <DialogoNovaContaBancaria empresaId={empresaIdAtiva} /> : null}
       />
       <CardBody className="px-0 py-0">
@@ -46,7 +47,9 @@ export default async function CadastroContasBancariasPage({
                 <th className="px-5 py-2.5 text-left font-medium">Nome</th>
                 <th className="px-3 py-2.5 text-left font-medium">Banco</th>
                 <th className="px-3 py-2.5 text-left font-medium">Tipo</th>
+                <th className="px-3 py-2.5 text-left font-medium">Data ref.</th>
                 <th className="px-3 py-2.5 text-right font-medium">Saldo inicial</th>
+                <th className="px-3 py-2.5 text-right font-medium">Saldo atual</th>
                 {podeEditar ? <th className="px-5 py-2.5 text-right font-medium">Ações</th> : null}
               </tr>
             </thead>
@@ -58,10 +61,19 @@ export default async function CadastroContasBancariasPage({
                   </th>
                   <td className="px-3 py-2.5 text-muted-foreground">{conta.banco ?? "—"}</td>
                   <td className="px-3 py-2.5 text-muted-foreground">{ROTULO_TIPO[conta.tipo]}</td>
-                  <td className="px-3 py-2.5 text-right tabular">{moeda(conta.saldoInicial)}</td>
+                  <td className="px-3 py-2.5 tabular text-muted-foreground">
+                    {formatarData(conta.dataSaldoInicial)}
+                  </td>
+                  <td className="px-3 py-2.5 text-right tabular text-muted-foreground">
+                    {moeda(conta.saldoInicial)}
+                  </td>
+                  <td className="px-3 py-2.5 text-right tabular font-medium">
+                    {moeda(conta.saldoAtual ?? conta.saldoInicial)}
+                  </td>
                   {podeEditar ? (
                     <td className="px-5 py-2.5">
-                      <div className="flex justify-end">
+                      <div className="flex items-center justify-end gap-3">
+                        <EditarContaBancaria conta={conta} empresaId={empresaIdAtiva} />
                         <RemoverContaBancaria conta={conta} empresaId={empresaIdAtiva} />
                       </div>
                     </td>
@@ -71,7 +83,7 @@ export default async function CadastroContasBancariasPage({
               {contas.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={podeEditar ? 5 : 4}
+                    colSpan={podeEditar ? 7 : 6}
                     className="px-5 py-8 text-center text-sm text-muted-foreground"
                   >
                     Nenhuma conta cadastrada. Use <strong>Nova conta</strong> para começar.

@@ -2,8 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 
+import { registrarHistoricoAvaliacaoDiagnostico } from "@/app/(app)/diagnostico/acoes";
 import { exigirSessao, temPapel } from "@/lib/autorizacao";
 import { AREAS_AVALIACAO, type TipoAvaliacao } from "@/lib/avaliacoes";
+import { type Sessao } from "@/lib/sessao";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { supabaseConfigurado } from "@/lib/supabase/config";
 
@@ -82,13 +84,14 @@ export async function salvarAvaliacao(
     const resultado = await salvarDiagnostico({
       empresaId,
       competencia,
-      usuarioId: sessao.usuarioId,
+      sessao,
       observacoes: String(formData.get("observacoes") ?? "").trim(),
       notas,
       formData,
     });
     if (resultado) return { erro: resultado, valores };
     revalidatePath("/diagnostico");
+    revalidatePath("/diagnostico/relatorio");
   } else {
     const resultado = await salvarMaturidade({
       empresaId,
@@ -106,18 +109,20 @@ export async function salvarAvaliacao(
 async function salvarDiagnostico({
   empresaId,
   competencia,
-  usuarioId,
+  sessao,
   observacoes,
   notas,
   formData,
 }: {
   empresaId: string;
   competencia: string;
-  usuarioId: string;
+  sessao: Sessao;
   observacoes: string;
   notas: { categoria: string; valor: number }[];
   formData: FormData;
 }) {
+  // Upsert só da avaliação: nota + observação. Campos de execução (realizado,
+  // data_realizacao, progresso) não entram no payload e permanecem intactos.
   const { data, error } = await supabaseAdmin
     .from("diagnosticos")
     .upsert(
@@ -125,18 +130,49 @@ async function salvarDiagnostico({
         empresa_id: empresaId,
         competencia,
         observacoes: observacoes || null,
-        created_by: usuarioId,
+        created_by: sessao.usuarioId,
+        updated_at: new Date().toISOString(),
       },
       { onConflict: "empresa_id,competencia" },
     )
     .select("id")
     .single();
 
-  if (error || !data) return "Não foi possível salvar o diagnóstico.";
+  if (error || !data) {
+    // Compatível se updated_at ainda não existir.
+    if (error && /updated_at/i.test(error.message)) {
+      const retry = await supabaseAdmin
+        .from("diagnosticos")
+        .upsert(
+          {
+            empresa_id: empresaId,
+            competencia,
+            observacoes: observacoes || null,
+            created_by: sessao.usuarioId,
+          },
+          { onConflict: "empresa_id,competencia" },
+        )
+        .select("id")
+        .single();
+      if (retry.error || !retry.data) return "Não foi possível salvar o diagnóstico.";
+      return await gravarItensAvaliacao(retry.data.id, empresaId, sessao, notas, formData);
+    }
+    return "Não foi possível salvar o diagnóstico.";
+  }
 
+  return await gravarItensAvaliacao(data.id, empresaId, sessao, notas, formData);
+}
+
+async function gravarItensAvaliacao(
+  diagnosticoId: string,
+  empresaId: string,
+  sessao: Sessao,
+  notas: { categoria: string; valor: number }[],
+  formData: FormData,
+) {
   const { error: itensError } = await supabaseAdmin.from("diagnostico_itens").upsert(
     notas.map(({ categoria, valor }) => ({
-      diagnostico_id: data.id,
+      diagnostico_id: diagnosticoId,
       categoria,
       nota: valor,
       observacao: String(formData.get(`observacao_${categoria}`) ?? "").trim() || null,
@@ -144,7 +180,20 @@ async function salvarDiagnostico({
     { onConflict: "diagnostico_id,categoria" },
   );
 
-  return itensError ? "O diagnóstico foi criado, mas não foi possível salvar suas áreas." : null;
+  if (itensError) {
+    return "O diagnóstico foi criado, mas não foi possível salvar suas áreas.";
+  }
+
+  await registrarHistoricoAvaliacaoDiagnostico(sessao, {
+    diagnosticoId,
+    empresaId,
+    descricao: `Avaliação salva (${notas.length} áreas).`,
+    alteracoes: {
+      notas: Object.fromEntries(notas.map((n) => [n.categoria, n.valor])),
+    },
+  });
+
+  return null;
 }
 
 async function salvarMaturidade({

@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { CheckCircle2, Info, Plus, Trash2, WandSparkles } from "lucide-react";
+import { CheckCircle2, Info, Pencil, Plus, Trash2, WandSparkles } from "lucide-react";
 
 import {
   carregarPlanoContasPadrao,
@@ -19,53 +19,89 @@ import { cn } from "@/lib/utils";
 const ESTADO: EstadoPlanoContas = {};
 
 export function DialogoNovaConta({ empresaId }: { empresaId: string }) {
+  return <DialogoConta empresaId={empresaId} />;
+}
+
+export function EditarConta({ conta, empresaId }: { conta: PlanoConta; empresaId: string }) {
+  return <DialogoConta empresaId={empresaId} conta={conta} />;
+}
+
+function DialogoConta({ empresaId, conta }: { empresaId: string; conta?: PlanoConta }) {
   const [aberto, setAberto] = useState(false);
   const [estado, acao] = useActionState(salvarContaPlano, ESTADO);
+  const editando = Boolean(conta);
+  const sufixo = conta?.id ?? "nova";
 
   return (
     <>
       <button
         type="button"
         onClick={() => setAberto(true)}
-        className="flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-xs font-medium text-brand-foreground"
+        className={cn(
+          "flex items-center gap-1.5 font-medium",
+          editando
+            ? "text-xs text-muted-foreground hover:text-foreground"
+            : "rounded-lg bg-brand px-3 py-1.5 text-xs text-brand-foreground",
+        )}
       >
-        <Plus className="size-3.5" aria-hidden />
-        Nova classificação
+        {editando ? <Pencil className="size-3.5" aria-hidden /> : <Plus className="size-3.5" aria-hidden />}
+        {editando ? "Editar" : "Nova classificação"}
       </button>
       <Modal
         aberto={aberto}
-        titulo="Nova classificação"
-        descricao="Conta do plano de contas usada em lançamentos e títulos"
+        titulo={editando ? "Editar classificação" : "Nova classificação"}
+        descricao={
+          editando
+            ? "Altere código, nome, tipo ou grupo da DRE desta linha"
+            : "Conta do plano de contas usada em lançamentos e títulos"
+        }
         onFechar={() => setAberto(false)}
       >
-        <form action={acao} className="space-y-4">
-          <Aviso estado={estado} />
+        <form action={acao} className="space-y-4" key={conta?.id ?? "nova"}>
+          <Aviso estado={estado} textoSucesso={editando ? "Classificação atualizada." : "Classificação salva."} />
           <input type="hidden" name="empresaId" value={empresaId} />
-          <div className="grid gap-4 sm:grid-cols-2">
-            <CampoTexto id="codigo" name="codigo" rotulo="Código" required placeholder="5.2.01" erro={estado.campos?.codigo} />
-            <CampoTexto id="nome" name="nome" rotulo="Nome" required placeholder="Aluguel" erro={estado.campos?.nome} />
-          </div>
+          {conta ? <input type="hidden" name="id" value={conta.id} /> : null}
+          {editando ? (
+            <div className="rounded-lg border border-border bg-surface-muted/40 px-3 py-2.5">
+              <p className="text-xs text-muted-foreground">Código</p>
+              <p className="font-mono text-sm tabular">{conta?.codigo}</p>
+            </div>
+          ) : (
+            <p className="rounded-lg border border-border bg-surface-muted/40 px-3 py-2.5 text-xs text-muted-foreground">
+              O código é gerado automaticamente conforme o grupo DRE (ex.: 5.2.05).
+            </p>
+          )}
+          <CampoTexto
+            id={`nome-${sufixo}`}
+            name="nome"
+            rotulo="Nome"
+            required
+            placeholder="Aluguel"
+            defaultValue={conta?.nome}
+            erro={estado.campos?.nome}
+          />
           <div className="grid gap-4 sm:grid-cols-2">
             <CampoSelect
-              id="tipo"
+              id={`tipo-${sufixo}`}
               name="tipo"
               rotulo="Tipo"
               required
-              defaultValue="despesa"
+              defaultValue={conta?.tipo ?? "despesa"}
               opcoes={Object.entries(ROTULO_TIPO_CONTA).map(([valor, rotulo]) => ({ valor, rotulo }))}
               erro={estado.campos?.tipo}
             />
             <CampoSelect
-              id="grupoDre"
+              id={`grupo-dre-${sufixo}`}
               name="grupoDre"
               rotulo="Grupo DRE"
               required
-              defaultValue="despesa_administrativa"
+              defaultValue={conta?.grupoDre ?? "despesa_administrativa"}
               opcoes={Object.entries(ROTULO_GRUPO_DRE).map(([valor, rotulo]) => ({ valor, rotulo }))}
               erro={estado.campos?.grupoDre}
+              dica={editando ? undefined : "Define o prefixo do código sequencial"}
             />
           </div>
-          <Rodape onCancelar={() => setAberto(false)} />
+          <Rodape onCancelar={() => setAberto(false)} texto={editando ? "Salvar alterações" : "Salvar"} />
         </form>
       </Modal>
     </>
@@ -118,7 +154,13 @@ export function RemoverConta({ conta, empresaId }: { conta: PlanoConta; empresaI
   );
 }
 
-function Aviso({ estado }: { estado: EstadoPlanoContas }) {
+function Aviso({
+  estado,
+  textoSucesso = "Classificação salva.",
+}: {
+  estado: EstadoPlanoContas;
+  textoSucesso?: string;
+}) {
   if (estado.erro) {
     return (
       <div role="alert" className="flex items-start gap-2 rounded-lg border border-negative/20 bg-negative-soft px-3 py-2 text-sm text-negative">
@@ -131,14 +173,14 @@ function Aviso({ estado }: { estado: EstadoPlanoContas }) {
     return (
       <div role="status" className="flex items-start gap-2 rounded-lg border border-positive/20 bg-positive/10 px-3 py-2 text-sm text-positive">
         <CheckCircle2 className="mt-0.5 size-4 shrink-0" aria-hidden />
-        Classificação salva.
+        {textoSucesso}
       </div>
     );
   }
   return null;
 }
 
-function Rodape({ onCancelar }: { onCancelar: () => void }) {
+function Rodape({ onCancelar, texto = "Salvar" }: { onCancelar: () => void; texto?: string }) {
   const { pending } = useFormStatus();
   return (
     <div className="flex justify-end gap-2 pt-2">
@@ -152,7 +194,7 @@ function Rodape({ onCancelar }: { onCancelar: () => void }) {
           "rounded-lg bg-brand px-3 py-2 text-sm font-medium text-brand-foreground disabled:opacity-50",
         )}
       >
-        {pending ? "Salvando…" : "Salvar"}
+        {pending ? "Salvando…" : texto}
       </button>
     </div>
   );

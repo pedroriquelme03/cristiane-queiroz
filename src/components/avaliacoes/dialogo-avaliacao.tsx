@@ -1,8 +1,8 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { CheckCircle2, ClipboardCheck, Info, Plus } from "lucide-react";
+import { CheckCircle2, ClipboardCheck, Info, Pencil, Plus } from "lucide-react";
 
 import {
   salvarAvaliacao,
@@ -26,17 +26,36 @@ export function DialogoAvaliacao({
   tipo,
   empresaId,
   inicial,
+  modo = "novo",
 }: {
   tipo: TipoAvaliacao;
   empresaId?: string;
   inicial?: AvaliacaoInicial;
+  /** Editar preserva a competência do snapshot e só altera notas/observações. */
+  modo?: "novo" | "editar";
 }) {
   const [aberto, setAberto] = useState(false);
   const [estado, acao] = useActionState(salvarAvaliacao, ESTADO_INICIAL);
   const diagnostico = tipo === "diagnostico";
-  const titulo = diagnostico ? "Novo diagnóstico" : "Nova avaliação";
+  const editando = modo === "editar";
+  const titulo = editando
+    ? diagnostico
+      ? "Editar diagnóstico"
+      : "Editar avaliação"
+    : diagnostico
+      ? "Novo diagnóstico"
+      : "Nova avaliação";
   const agora = new Date();
-  const competenciaPadrao = `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, "0")}`;
+  const competenciaPadrao =
+    inicial?.competencia?.slice(0, 7) ??
+    `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, "0")}`;
+
+  useEffect(() => {
+    if (estado.ok) {
+      const t = setTimeout(() => setAberto(false), 700);
+      return () => clearTimeout(t);
+    }
+  }, [estado.ok]);
 
   return (
     <>
@@ -45,32 +64,51 @@ export function DialogoAvaliacao({
         onClick={() => setAberto(true)}
         disabled={!empresaId}
         title={!empresaId ? "Selecione uma empresa" : titulo}
-        className="flex items-center gap-1.5 rounded-lg bg-brand px-3 py-2 text-sm font-medium text-brand-foreground disabled:cursor-not-allowed disabled:opacity-40"
+        className={cn(
+          "flex items-center gap-1.5 font-medium disabled:cursor-not-allowed disabled:opacity-40",
+          editando
+            ? "text-xs text-muted-foreground hover:text-foreground"
+            : "rounded-lg bg-brand px-3 py-2 text-sm text-brand-foreground",
+        )}
       >
-        <Plus className="size-4" aria-hidden />
+        {editando ? <Pencil className="size-3.5" aria-hidden /> : <Plus className="size-4" aria-hidden />}
         {titulo}
       </button>
 
       <Modal
         aberto={aberto}
         titulo={titulo}
-        descricao="Registre notas de 0 a 100 para cada área da empresa"
+        descricao={
+          editando
+            ? "Altera apenas a avaliação (notas e observações). A execução por área fica intacta."
+            : "Registre notas de 0 a 100 para cada área da empresa"
+        }
         onFechar={() => setAberto(false)}
         className="max-w-2xl"
       >
-        <form action={acao} className="space-y-5">
+        <form action={acao} className="space-y-5" key={`${modo}-${competenciaPadrao}-${aberto}`}>
           <input type="hidden" name="tipo" value={tipo} />
           <input type="hidden" name="empresaId" value={empresaId ?? ""} />
           <Aviso estado={estado} diagnostico={diagnostico} />
 
-          <CampoTexto
-            id="competencia"
-            rotulo="Competência"
-            tipo="month"
-            defaultValue={estado.valores?.competencia ?? competenciaPadrao}
-            erro={estado.campos?.competencia}
-            required
-          />
+          {editando ? (
+            <>
+              <input type="hidden" name="competencia" value={competenciaPadrao} />
+              <p className="rounded-lg border border-border bg-surface-muted/50 px-3 py-2 text-sm text-muted-foreground">
+                Competência:{" "}
+                <span className="font-medium text-foreground">{competenciaPadrao}</span>
+              </p>
+            </>
+          ) : (
+            <CampoTexto
+              id="competencia"
+              rotulo="Competência"
+              tipo="month"
+              defaultValue={estado.valores?.competencia ?? competenciaPadrao}
+              erro={estado.campos?.competencia}
+              required
+            />
+          )}
 
           <div className="space-y-3">
             {AREAS_AVALIACAO.map((area) => {

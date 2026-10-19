@@ -6,7 +6,13 @@ import { TabelaTitulos } from "@/components/financeiro/tabela-titulos";
 import { LinkGerarRelatorio } from "@/components/relatorios/link-gerar-relatorio";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Kpi } from "@/components/ui/kpi";
-import { agruparContasFixas, getPlanoContas, getTitulos, statusEfetivo } from "@/lib/dados";
+import {
+  agruparContasFixas,
+  getContasBancarias,
+  getPlanoContas,
+  getTitulos,
+  statusEfetivo,
+} from "@/lib/dados";
 import { diasAte, moeda } from "@/lib/format";
 import { getSessao } from "@/lib/sessao";
 
@@ -19,9 +25,10 @@ export default async function ContasAPagarPage({
   const empresaId = typeof empresa === "string" ? empresa : undefined;
   const empresaIdAtiva = sessao.role === "admin" ? empresaId : sessao.empresaId;
   const podeEditar = Boolean(empresaIdAtiva) && (sessao.role === "admin" || sessao.role === "cliente");
-  const [titulos, contas] = await Promise.all([
+  const [titulos, contas, contasBancarias] = await Promise.all([
     getTitulos("pagar", empresaIdAtiva),
     getPlanoContas(empresaIdAtiva),
+    getContasBancarias(empresaIdAtiva),
   ]);
 
   const abertos = titulos.filter(
@@ -92,6 +99,7 @@ export default async function ContasAPagarPage({
             tipo="pagar"
             rotuloContraparte="Fornecedor"
             contas={contas}
+            contasBancarias={contasBancarias}
             empresaId={empresaIdAtiva}
             podeEditar={podeEditar}
           />
@@ -105,7 +113,14 @@ export default async function ContasAPagarPage({
             descricao="Prioridade de negociação — risco de juros e de corte de fornecimento"
           />
           <CardBody className="px-0 py-0">
-            <TabelaTitulos titulos={vencidos} rotuloContraparte="Fornecedor" contas={contas} empresaId={empresaIdAtiva} podeEditar={podeEditar} />
+            <TabelaTitulos
+              titulos={vencidos}
+              rotuloContraparte="Fornecedor"
+              contas={contas}
+              contasBancarias={contasBancarias}
+              empresaId={empresaIdAtiva}
+              podeEditar={podeEditar}
+            />
           </CardBody>
         </Card>
       ) : null}
@@ -122,14 +137,28 @@ export default async function ContasAPagarPage({
           }
         />
         <CardBody className="px-0 py-0">
-          <TabelaTitulos titulos={abertos} rotuloContraparte="Fornecedor" contas={contas} empresaId={empresaIdAtiva} podeEditar={podeEditar} />
+          <TabelaTitulos
+            titulos={abertos}
+            rotuloContraparte="Fornecedor"
+            contas={contas}
+            contasBancarias={contasBancarias}
+            empresaId={empresaIdAtiva}
+            podeEditar={podeEditar}
+          />
         </CardBody>
       </Card>
 
       <Card>
         <CardHeader titulo="Histórico de pagamentos" descricao="Títulos já quitados" />
         <CardBody className="px-0 py-0">
-          <TabelaTitulos titulos={pagos} rotuloContraparte="Fornecedor" contas={contas} empresaId={empresaIdAtiva} podeEditar={podeEditar} />
+          <TabelaTitulos
+            titulos={pagos}
+            rotuloContraparte="Fornecedor"
+            contas={contas}
+            contasBancarias={contasBancarias}
+            empresaId={empresaIdAtiva}
+            podeEditar={podeEditar}
+          />
         </CardBody>
       </Card>
     </>

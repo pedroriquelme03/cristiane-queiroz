@@ -12,6 +12,7 @@ import {
 import { CampoSelect, CampoTexto } from "@/components/ui/campo";
 import { CampoData } from "@/components/ui/campo-data";
 import { Modal } from "@/components/ui/modal";
+import { opcoesSelectClassificacao } from "@/lib/plano-contas-padrao";
 import type { Lancamento, PlanoConta } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -123,14 +124,9 @@ export function DialogoLancamento({
               name="planoContaId"
               rotulo="Classificação"
               required
-              opcoes={[
-                { valor: "", rotulo: "Selecione a classificação" },
-                ...contas.map((conta) => ({
-                  valor: conta.id,
-                  rotulo: conta.nome,
-                  detalhe: conta.codigo,
-                })),
-              ]}
+              opcoes={opcoesSelectClassificacao(contas, {
+                placeholder: "Selecione a classificação",
+              })}
               pesquisavel
               defaultValue={valor("planoContaId", lancamento?.planoContaId ?? contas[0]?.id)}
               erro={estado.campos?.planoContaId}
@@ -144,6 +140,23 @@ export function DialogoLancamento({
               erro={estado.campos?.documento}
             />
           </div>
+
+          <CamposImpacto
+            sufixo={sufixo}
+            impactaDrePadrao={
+              estado.valores?.impactaDre !== undefined
+                ? estado.valores.impactaDre === "on" || estado.valores.impactaDre === "true"
+                : (lancamento?.impactaDre ?? true)
+            }
+            impactaFluxoPadrao={
+              estado.valores?.impactaFluxo !== undefined
+                ? estado.valores.impactaFluxo === "on" || estado.valores.impactaFluxo === "true"
+                : (lancamento?.impactaFluxo ?? true)
+            }
+            erro={estado.campos?.impactaDre}
+            dicaDre="Competência pela data do lançamento (exige classificação)"
+            dicaFluxo="Entra no saldo e no fluxo na data do caixa"
+          />
 
           <Rodape onCancelar={() => setAberto(false)} texto={editando ? "Salvar alterações" : "Salvar"} />
         </form>
@@ -205,9 +218,11 @@ export function Aviso({
 export function Rodape({
   onCancelar,
   texto = "Salvar",
+  desabilitado = false,
 }: {
   onCancelar: () => void;
   texto?: string;
+  desabilitado?: boolean;
 }) {
   const { pending } = useFormStatus();
   return (
@@ -215,9 +230,78 @@ export function Rodape({
       <button type="button" onClick={onCancelar} className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground">
         Fechar
       </button>
-      <button type="submit" disabled={pending} className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-brand-foreground disabled:opacity-40">
+      <button
+        type="submit"
+        disabled={pending || desabilitado}
+        className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-brand-foreground disabled:opacity-40"
+      >
         {pending ? "Salvando..." : texto}
       </button>
     </div>
+  );
+}
+
+/** Onde o valor impacta: DRE (competência) e/ou fluxo de caixa. */
+export function CamposImpacto({
+  sufixo,
+  impactaDrePadrao = true,
+  impactaFluxoPadrao = true,
+  erro,
+  dicaDre,
+  dicaFluxo,
+}: {
+  sufixo: string;
+  impactaDrePadrao?: boolean;
+  impactaFluxoPadrao?: boolean;
+  erro?: string;
+  dicaDre?: string;
+  dicaFluxo?: string;
+}) {
+  return (
+    <fieldset className="space-y-3 rounded-lg border border-border bg-surface-muted/40 px-3 py-3">
+      <legend className="px-1 text-sm font-medium text-foreground">Impacto do valor</legend>
+      <p className="text-xs text-muted-foreground">
+        Escolha onde este valor entra nos relatórios. Marque pelo menos uma opção.
+      </p>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <label className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            name="impactaDre"
+            value="on"
+            defaultChecked={impactaDrePadrao}
+            className="mt-0.5 size-4 rounded border-border accent-brand"
+            aria-describedby={`dica-dre-${sufixo}`}
+          />
+          <span>
+            <span className="font-medium">DRE (competência)</span>
+            {dicaDre ? (
+              <span id={`dica-dre-${sufixo}`} className="mt-0.5 block text-xs text-muted-foreground">
+                {dicaDre}
+              </span>
+            ) : null}
+          </span>
+        </label>
+        <label className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            name="impactaFluxo"
+            value="on"
+            defaultChecked={impactaFluxoPadrao}
+            className="mt-0.5 size-4 rounded border-border accent-brand"
+            aria-describedby={`dica-fluxo-${sufixo}`}
+          />
+          <span>
+            <span className="font-medium">Fluxo de caixa</span>
+            {dicaFluxo ? (
+              <span id={`dica-fluxo-${sufixo}`} className="mt-0.5 block text-xs text-muted-foreground">
+                {dicaFluxo}
+              </span>
+            ) : null}
+          </span>
+        </label>
+      </div>
+      {erro ? <p className="text-xs text-negative">{erro}</p> : null}
+    </fieldset>
   );
 }

@@ -2,11 +2,9 @@
 
 import { useState } from "react";
 
+import { SeletorPlanoContas } from "@/components/relatorios/seletor-plano-contas";
 import { CampoTexto } from "@/components/ui/campo";
-import {
-  CONTA_SEM_CLASSIFICACAO,
-  type FiltrosRelatorio,
-} from "@/lib/relatorios/filtros";
+import { type FiltrosRelatorio } from "@/lib/relatorios/filtros";
 import type { PlanoConta } from "@/lib/types";
 
 const CLASSE_SELECT =
@@ -150,40 +148,11 @@ export function FiltrosRelatorioForm({
         <fieldset>
           <legend className="text-sm font-medium">Plano de contas</legend>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Nenhuma marcada = todas as classificações. Combine com o período para ver, por exemplo, o que foi pago de Aluguel no mês.
+            Marque itens individuais ou o grupo inteiro. Estado parcial = só algumas contas do
+            grupo. Nenhuma marcada = todas no relatório.
           </p>
-          <div className="mt-2 max-h-44 overflow-y-auto rounded-lg border border-border p-3">
-            <label className="mb-2 flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                name="conta"
-                value={CONTA_SEM_CLASSIFICACAO}
-                defaultChecked={filtros.contas.includes(CONTA_SEM_CLASSIFICACAO)}
-                className="size-4 accent-brand"
-              />
-              Sem classificação
-            </label>
-            {contas.length === 0 ? (
-              <p className="text-xs text-muted-foreground">Nenhuma classificação cadastrada.</p>
-            ) : (
-              <div className="grid gap-1.5 sm:grid-cols-2 xl:grid-cols-3">
-                {contas.map((conta) => (
-                  <label key={conta.id} className="flex items-start gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      name="conta"
-                      value={conta.id}
-                      defaultChecked={filtros.contas.includes(conta.id)}
-                      className="mt-0.5 size-4 shrink-0 accent-brand"
-                    />
-                    <span>
-                      <span className="font-mono text-xs text-muted-foreground">{conta.codigo}</span>{" "}
-                      {conta.nome}
-                    </span>
-                  </label>
-                ))}
-              </div>
-            )}
+          <div className="mt-2">
+            <SeletorPlanoContas contas={contas} selecionadasIniciais={filtros.contas} />
           </div>
         </fieldset>
       ) : null}

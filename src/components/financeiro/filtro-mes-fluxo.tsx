@@ -25,13 +25,19 @@ const MESES = [
 const classeSelect =
   "cursor-pointer rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium text-foreground outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:cursor-wait disabled:opacity-60";
 
-/** Filtro de mês/ano do Fluxo de caixa (sincroniza a competência global). */
+/** Filtro de mês/ano (sincroniza a competência global). */
 export function FiltroMesFluxo({
   competencia,
   opcoes,
+  titulo = "Filtro de mês",
+  descricao = "KPIs, gráficos e lançamentos do período selecionado",
+  idPrefixo = "filtro-fluxo",
 }: {
   competencia: string;
   opcoes: string[];
+  titulo?: string;
+  descricao?: string;
+  idPrefixo?: string;
 }) {
   const router = useRouter();
   const [pendente, iniciar] = useTransition();
@@ -69,18 +75,16 @@ export function FiltroMesFluxo({
       )}
     >
       <div className="min-w-0">
-        <p className="text-sm font-medium">Filtro de mês</p>
-        <p className="text-xs text-muted-foreground">
-          KPIs, gráficos e lançamentos do período selecionado
-        </p>
+        <p className="text-sm font-medium">{titulo}</p>
+        <p className="text-xs text-muted-foreground">{descricao}</p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <CalendarDays className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-        <label className="sr-only" htmlFor="filtro-fluxo-mes">
+        <label className="sr-only" htmlFor={`${idPrefixo}-mes`}>
           Mês
         </label>
         <select
-          id="filtro-fluxo-mes"
+          id={`${idPrefixo}-mes`}
           value={mesAtual}
           onChange={(evento) => aoMudar(evento.target.value, anoAtual)}
           disabled={pendente}
@@ -92,11 +96,11 @@ export function FiltroMesFluxo({
             </option>
           ))}
         </select>
-        <label className="sr-only" htmlFor="filtro-fluxo-ano">
+        <label className="sr-only" htmlFor={`${idPrefixo}-ano`}>
           Ano
         </label>
         <select
-          id="filtro-fluxo-ano"
+          id={`${idPrefixo}-ano`}
           value={anoAtual}
           onChange={(evento) => aoMudar(mesAtual, evento.target.value)}
           disabled={pendente}

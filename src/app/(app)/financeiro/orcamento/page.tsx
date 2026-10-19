@@ -1,6 +1,9 @@
+import Link from "next/link";
+
 import { Badge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Kpi } from "@/components/ui/kpi";
+import { FiltroMesFluxo } from "@/components/financeiro/filtro-mes-fluxo";
 import { FormCadastrarPrevistos } from "@/components/financeiro/form-cadastrar-previsto";
 import {
   getCompetenciaAtual,
@@ -8,6 +11,7 @@ import {
   getOrcamentos,
   getPlanoContas,
   intervaloDoMes,
+  listarCompetenciasOpcoes,
 } from "@/lib/dados";
 import { competenciaExtenso, moeda, percentual } from "@/lib/format";
 import { getSessao } from "@/lib/sessao";
@@ -25,8 +29,12 @@ export default async function OrcamentoPage({
   const empresaId = typeof empresa === "string" ? empresa : undefined;
   const empresaIdAtiva = sessao.role === "admin" ? empresaId : sessao.empresaId;
   const podeEditar = Boolean(empresaIdAtiva) && (sessao.role === "admin" || sessao.role === "cliente");
+  const sufixoEmpresa = empresaIdAtiva ? `?empresa=${encodeURIComponent(empresaIdAtiva)}` : "";
 
-  const competencia = await getCompetenciaAtual();
+  const [competencia, opcoesCompetencia] = await Promise.all([
+    getCompetenciaAtual(),
+    listarCompetenciasOpcoes(empresaIdAtiva),
+  ]);
   const { inicio, fim } = intervaloDoMes(competencia);
   const [linhasDre, contas, orcamentos] = await Promise.all([
     getDre(inicio, fim, empresaIdAtiva),
@@ -34,15 +42,21 @@ export default async function OrcamentoPage({
     getOrcamentos(competencia, empresaIdAtiva),
   ]);
 
+  // Comparativo usa o mesmo `previsto` da DRE (tabela orcamentos cadastrada acima).
   const linhas = linhasDre.filter((l) => l.realizado !== 0 || l.previsto !== 0);
   const receitas = linhas.filter((l) => l.tipo === "receita");
   const gastos = linhas.filter((l) => l.tipo !== "receita");
 
   const totalPrevisto = linhas.reduce((s, l) => s + l.previsto, 0);
   const totalRealizado = linhas.reduce((s, l) => s + l.realizado, 0);
+  const totalOrcadoCadastrado = orcamentos.reduce((s, o) => s + o.valorPrevisto, 0);
+  const orcadoConfere =
+    Math.abs(
+      linhasDre.reduce((s, l) => s + l.previsto, 0) - totalOrcadoCadastrado,
+    ) < 0.005;
 
   /**
-   * Um desvio é favorável quando sobra dinheiro: receita acima do previsto ou
+   * Um desvio é favorável quando sobra dinheiro: receita acima do orçado ou
    * gasto abaixo. Como os gastos vêm negativos, a conta é a mesma nos dois casos.
    */
   const desvios = linhas
@@ -60,8 +74,35 @@ export default async function OrcamentoPage({
     1,
   );
 
+  if (sessao.role === "admin" && !empresaIdAtiva) {
+    return (
+      <>
+        <FiltroMesFluxo
+          competencia={competencia}
+          opcoes={opcoesCompetencia}
+          titulo="Período do orçamento"
+          descricao="Mês de competência dos valores orçados e da comparação com o realizado"
+          idPrefixo="filtro-orcamento"
+        />
+        <Card>
+          <CardBody className="py-12 text-center text-sm text-muted-foreground">
+            Selecione um cliente (empresa) no topo para cadastrar e editar o orçamento.
+          </CardBody>
+        </Card>
+      </>
+    );
+  }
+
   return (
     <>
+      <FiltroMesFluxo
+        competencia={competencia}
+        opcoes={opcoesCompetencia}
+        titulo="Período do orçamento"
+        descricao="Mês de competência dos valores orçados e da comparação com o realizado"
+        idPrefixo="filtro-orcamento"
+      />
+
       <FormCadastrarPrevistos
         empresaId={empresaIdAtiva}
         competencia={competencia}
@@ -71,7 +112,11 @@ export default async function OrcamentoPage({
       />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Kpi rotulo="Resultado orçado" valor={moeda(totalPrevisto)} />
+        <Kpi
+          rotulo="Resultado orçado"
+          valor={moeda(totalPrevisto)}
+          nota={`${orcamentos.length} categoria${orcamentos.length === 1 ? "" : "s"} cadastrada${orcamentos.length === 1 ? "" : "s"}`}
+        />
         <Kpi
           rotulo="Resultado realizado"
           valor={moeda(totalRealizado)}
@@ -95,6 +140,22 @@ export default async function OrcamentoPage({
         />
       </div>
 
+      <p
+        className={cn(
+          "rounded-xl border px-4 py-3 text-sm",
+          orcadoConfere
+            ? "border-positive/30 bg-positive/5 text-foreground"
+            : "border-warning/40 bg-warning/5 text-foreground",
+        )}
+      >
+        {orcadoConfere
+          ? `Comparativo orçado × realizado usa os ${orcamentos.length} valor(es) cadastrados na tabela orçamentos deste mês (${moeda(totalOrcadoCadastrado)}).`
+          : `Atenção: o orçado nas linhas da DRE (${moeda(linhasDre.reduce((s, l) => s + l.previsto, 0))}) não bate com a soma dos cadastros (${moeda(totalOrcadoCadastrado)}).`}{" "}
+        <Link href={`/financeiro/dre${sufixoEmpresa}`} className="font-medium text-brand hover:underline">
+          Ver na DRE
+        </Link>
+      </p>
+
       <Card>
         <CardHeader
           titulo="Maiores desvios"
@@ -116,7 +177,9 @@ export default async function OrcamentoPage({
                 {desvios.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="px-5 py-8 text-center text-sm text-muted-foreground">
-                      Cadastre os previstos acima para acompanhar os desvios do mês.
+                      {orcamentos.length === 0
+                        ? "Cadastre os orçados acima (por categoria e mês) para acompanhar os desvios."
+                        : "Nenhum desvio acima da tolerância neste período."}
                     </td>
                   </tr>
                 ) : (
@@ -163,12 +226,12 @@ export default async function OrcamentoPage({
 
       <div className="grid gap-6 xl:grid-cols-2">
         <ComparativoCard
-          titulo="Receitas: previsto x realizado"
+          titulo="Receitas: orçado × realizado"
           linhas={receitas}
           escala={maiorEscala}
         />
         <ComparativoCard
-          titulo="Custos e despesas: previsto x realizado"
+          titulo="Custos e despesas: orçado × realizado"
           linhas={gastos}
           escala={maiorEscala}
         />

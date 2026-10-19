@@ -2,8 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 
+import { definirCompetencia } from "@/app/(app)/competencia/acoes";
 import { resolverEmpresaAlvo } from "@/lib/autorizacao";
 import { parseData, parseValor } from "@/lib/importacao/parsers";
+import { proximoCodigoConta } from "@/lib/plano-contas-padrao";
 import { type Sessao } from "@/lib/sessao";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { supabaseConfigurado } from "@/lib/supabase/config";
@@ -92,6 +94,8 @@ export async function salvarLancamento(
     contraparte: analise.data.contraparte ?? null,
     documento: analise.data.documento ?? null,
     plano_conta_id: analise.data.planoContaId,
+    impacta_dre: analise.data.impactaDre,
+    impacta_fluxo: analise.data.impactaFluxo,
   };
 
   if (id) {
@@ -101,7 +105,15 @@ export async function salvarLancamento(
       return { erro: "Lançamentos gerados por baixas ou integrações não podem ser editados manualmente.", valores };
     }
     const { error } = await supabaseAdmin.from("lancamentos").update(registro).eq("id", id);
-    if (error) return { erro: "Não foi possível atualizar o lançamento.", valores };
+    if (error) {
+      if (/impacta_/i.test(error.message)) {
+        return {
+          erro: "Falta aplicar a migration 0025_impacto_dre_fluxo.sql no Supabase.",
+          valores,
+        };
+      }
+      return { erro: "Não foi possível atualizar o lançamento.", valores };
+    }
   } else {
     const { error } = await supabaseAdmin.from("lancamentos").insert({
       ...registro,
@@ -109,7 +121,15 @@ export async function salvarLancamento(
       origem: "manual",
       created_by: sessao.usuarioId,
     });
-    if (error) return { erro: "Não foi possível salvar o lançamento.", valores };
+    if (error) {
+      if (/impacta_/i.test(error.message)) {
+        return {
+          erro: "Falta aplicar a migration 0025_impacto_dre_fluxo.sql no Supabase.",
+          valores,
+        };
+      }
+      return { erro: "Não foi possível salvar o lançamento.", valores };
+    }
   }
 
   revalidarFinanceiro();
@@ -181,17 +201,31 @@ export async function salvarTitulo(
     plano_conta_id: analise.data.planoContaId,
     status,
     fixa,
+    impacta_dre: analise.data.impactaDre,
+    impacta_fluxo: analise.data.impactaFluxo,
   };
 
   if (id) {
     const { error } = await supabaseAdmin.from("titulos").update(registro).eq("id", id);
-    if (error) return { erro: "Não foi possível atualizar o título.", valores };
+    if (error) {
+      if (/impacta_/i.test(error.message)) {
+        return {
+          erro: "Falta aplicar a migration 0025_impacto_dre_fluxo.sql no Supabase.",
+          valores,
+        };
+      }
+      return { erro: "Não foi possível atualizar o título.", valores };
+    }
 
-    // Em contas fixas, a classificação vale para todas as parcelas do mesmo cadastro.
+    // Em contas fixas, classificação e impacto valem para todas as parcelas do mesmo cadastro.
     if (grupoFixaExistente) {
       await supabaseAdmin
         .from("titulos")
-        .update({ plano_conta_id: analise.data.planoContaId })
+        .update({
+          plano_conta_id: analise.data.planoContaId,
+          impacta_dre: analise.data.impactaDre,
+          impacta_fluxo: analise.data.impactaFluxo,
+        })
         .eq("empresa_id", empresaId)
         .eq("grupo_fixa_id", grupoFixaExistente);
     }
@@ -218,6 +252,12 @@ export async function salvarTitulo(
 
     const { error } = await supabaseAdmin.from("titulos").insert(registros);
     if (error) {
+      if (/impacta_/i.test(error.message)) {
+        return {
+          erro: "Falta aplicar a migration 0025_impacto_dre_fluxo.sql no Supabase.",
+          valores,
+        };
+      }
       // Coluna `fixa` / `grupo_fixa_id` pode ainda não existir se a migration não foi aplicada.
       if (String(error.message).toLowerCase().includes("fixa")) {
         return {
@@ -252,15 +292,24 @@ export async function registrarBaixaTitulo(
   const contexto = await contextoFinanceiro(formData);
   if ("erro" in contexto) return { erro: contexto.erro, valores };
   const id = String(formData.get("id") ?? "").trim();
+  const idempotencyKey = String(formData.get("idempotencyKey") ?? "").trim();
+  const contaBancariaId = String(formData.get("contaBancariaId") ?? "").trim();
   const dataBruta = String(formData.get("data") ?? "").trim();
   const data = parseData(dataBruta) ?? "";
   const valor = parseValor(formData.get("valor"));
   const campos: Record<string, string> = {};
+  if (!idempotencyKey || idempotencyKey.length < 8) {
+    return { erro: "Requisição inválida. Feche e abra a baixa novamente.", valores };
+  }
   if (!data) campos.data = "Informe a data no formato dd/mm/aaaa.";
   if (data && data > new Date().toISOString().slice(0, 10)) {
     campos.data = "A baixa não pode ter data futura.";
   }
   if (valor === null || valor <= 0) campos.valor = "Informe um valor maior que zero.";
+  if (!contaBancariaId) {
+    campos.contaBancariaId =
+      "Selecione a conta bancária ou caixa da movimentação.";
+  }
   if (Object.keys(campos).length) return { campos, valores };
 
   const titulo = await buscarTituloAutorizado(id, contexto.empresaId, contexto.sessao);
@@ -269,22 +318,107 @@ export async function registrarBaixaTitulo(
     return { erro: "Este título não aceita novas baixas.", valores };
   }
 
+  // Conta e título devem ser da mesma empresa (cliente).
+  const { data: contaBancaria } = await supabaseAdmin
+    .from("contas_bancarias")
+    .select("id, empresa_id, ativo")
+    .eq("id", contaBancariaId)
+    .eq("empresa_id", contexto.empresaId)
+    .eq("ativo", true)
+    .maybeSingle();
+  if (!contaBancaria || contaBancaria.empresa_id !== titulo.empresa_id) {
+    return {
+      campos: {
+        contaBancariaId: "Conta inválida para este cliente/empresa.",
+      },
+      valores,
+    };
+  }
+
+  // Mesma chave = mesma tentativa (duplo clique / retry): não cria pagamento de novo.
+  const { data: baixaExistente } = await supabaseAdmin
+    .from("titulos_baixas")
+    .select("id, lancamento_id")
+    .eq("titulo_id", titulo.id)
+    .eq("idempotency_key", idempotencyKey)
+    .maybeSingle();
+  if (baixaExistente?.lancamento_id) {
+    revalidarFinanceiro();
+    return { ok: true };
+  }
+
   const saldo = Number(titulo.valor) - Number(titulo.valor_pago);
-  if (valor! > saldo) {
+  if (valor! > saldo + 0.001) {
     return { campos: { valor: `A baixa não pode superar o saldo de ${saldo.toFixed(2)}.` }, valores };
   }
 
-  const novoValorPago = Number(titulo.valor_pago) + valor!;
+  const valorPagoAtual = Number(titulo.valor_pago);
+  const novoValorPago = Math.round((valorPagoAtual + valor!) * 100) / 100;
   const novoStatus = statusDoTitulo(Number(titulo.valor), novoValorPago);
   const descricao = titulo.tipo === "pagar"
     ? `Pagamento: ${titulo.contraparte}`
     : `Recebimento: ${titulo.contraparte}`;
+
+  // Reserva a chave antes de mudar saldo/caixa (impede corrida com a mesma chave).
+  let reservaId: string | null = baixaExistente?.id ?? null;
+  if (!reservaId) {
+    const { data: reserva, error: erroReserva } = await supabaseAdmin
+      .from("titulos_baixas")
+      .insert({
+        empresa_id: titulo.empresa_id,
+        titulo_id: titulo.id,
+        data,
+        valor,
+        idempotency_key: idempotencyKey,
+        created_by: contexto.sessao.usuarioId,
+      })
+      .select("id")
+      .maybeSingle();
+
+    if (erroReserva) {
+      if (erroReserva.code === "23505") {
+        revalidarFinanceiro();
+        return { ok: true };
+      }
+      if (/titulos_baixas|idempotency/i.test(erroReserva.message)) {
+        return {
+          erro: "Falta aplicar a migration 0026_titulos_baixas.sql no Supabase.",
+          valores,
+        };
+      }
+      return { erro: "Não foi possível iniciar a baixa.", valores };
+    }
+    reservaId = reserva?.id ?? null;
+  }
+  if (!reservaId) return { erro: "Não foi possível iniciar a baixa.", valores };
+
+  const liberarReserva = async () => {
+    await supabaseAdmin.from("titulos_baixas").delete().eq("id", reservaId!).is("lancamento_id", null);
+  };
+
+  // Atualiza o título primeiro (lock otimista pelo valor_pago) — evita pagamento duplicado.
+  const { data: tituloAtualizado, error: tituloError } = await supabaseAdmin
+    .from("titulos")
+    .update({ valor_pago: novoValorPago, status: novoStatus, data_pagamento: data })
+    .eq("id", titulo.id)
+    .eq("valor_pago", valorPagoAtual)
+    .in("status", ["aberto", "parcial"])
+    .select("id")
+    .maybeSingle();
+  if (tituloError || !tituloAtualizado) {
+    await liberarReserva();
+    return {
+      erro: "O título foi atualizado em outra sessão. Recarregue e tente novamente.",
+      valores,
+    };
+  }
 
   const { data: lancamento, error: lancamentoError } = await supabaseAdmin
     .from("lancamentos")
     .insert({
       empresa_id: titulo.empresa_id,
       plano_conta_id: titulo.plano_conta_id,
+      conta_bancaria_id: contaBancaria.id,
       data,
       tipo: titulo.tipo === "pagar" ? "saida" : "entrada",
       valor,
@@ -292,28 +426,76 @@ export async function registrarBaixaTitulo(
       contraparte: titulo.contraparte,
       documento: titulo.documento,
       origem: "integracao",
+      impacta_dre: false,
+      impacta_fluxo: true,
       created_by: contexto.sessao.usuarioId,
     })
     .select("id")
     .single();
+
+  const reverterTitulo = async () => {
+    await supabaseAdmin
+      .from("titulos")
+      .update({
+        valor_pago: valorPagoAtual,
+        status: statusDoTitulo(Number(titulo.valor), valorPagoAtual),
+        data_pagamento: titulo.data_pagamento ?? null,
+      })
+      .eq("id", titulo.id)
+      .eq("valor_pago", novoValorPago);
+  };
+
   if (lancamentoError || !lancamento) {
+    await reverterTitulo();
+    await liberarReserva();
     return { erro: "Não foi possível registrar a movimentação da baixa.", valores };
   }
 
-  const { data: tituloAtualizado, error: tituloError } = await supabaseAdmin
-    .from("titulos")
-    .update({ valor_pago: novoValorPago, status: novoStatus, data_pagamento: data })
-    .eq("id", titulo.id)
-    .eq("valor_pago", titulo.valor_pago)
-    .select("id")
-    .maybeSingle();
-  if (tituloError || !tituloAtualizado) {
+  const { error: erroBaixa } = await supabaseAdmin
+    .from("titulos_baixas")
+    .update({ lancamento_id: lancamento.id, data, valor })
+    .eq("id", reservaId);
+
+  if (erroBaixa) {
     await supabaseAdmin.from("lancamentos").delete().eq("id", lancamento.id);
-    return { erro: "O título foi atualizado em outra sessão. A movimentação foi revertida; tente novamente.", valores };
+    await reverterTitulo();
+    await liberarReserva();
+    return { erro: "Não foi possível concluir o histórico da baixa.", valores };
   }
 
   revalidarFinanceiro();
   return { ok: true };
+}
+
+/** Lista o histórico de baixas de um título (pagamentos/recebimentos). */
+export async function listarBaixasTitulo(tituloId: string, empresaId: string) {
+  const alvo = await resolverEmpresaAlvo(empresaId, {
+    papeis: ["admin", "cliente", "consultor"],
+    negado: "Sem permissão.",
+    semEmpresa: "Selecione uma empresa.",
+  });
+  if ("erro" in alvo) return [];
+
+  const titulo = await buscarTituloAutorizado(tituloId, alvo.empresaId, alvo.sessao);
+  if (!titulo) return [];
+
+  const { data, error } = await supabaseAdmin
+    .from("titulos_baixas")
+    .select("id, titulo_id, data, valor, lancamento_id")
+    .eq("titulo_id", tituloId)
+    .eq("empresa_id", alvo.empresaId)
+    .not("lancamento_id", "is", null)
+    .order("data", { ascending: true })
+    .order("created_at", { ascending: true });
+
+  if (error) return [];
+  return (data ?? []).map((row) => ({
+    id: row.id as string,
+    tituloId: row.titulo_id as string,
+    data: String(row.data).slice(0, 10),
+    valor: Number(row.valor),
+    lancamentoId: (row.lancamento_id as string | null) ?? null,
+  }));
 }
 
 export async function excluirTitulo(
@@ -491,7 +673,7 @@ async function buscarTituloAutorizado(id: string, empresaId: string, sessao: Ses
   const { data } = await supabaseAdmin
     .from("titulos")
     .select(
-      "id, empresa_id, tipo, contraparte, documento, valor, valor_pago, status, plano_conta_id, grupo_fixa_id",
+      "id, empresa_id, tipo, contraparte, documento, valor, valor_pago, data_pagamento, status, plano_conta_id, grupo_fixa_id",
     )
     .eq("id", id)
     .maybeSingle();
@@ -580,7 +762,17 @@ export async function criarCategoriaRapida(
               ? "nao_operacional"
               : "despesa_administrativa";
 
-  const codigo = `CF.${Date.now().toString().slice(-6)}`;
+  const { data: existentes, error: erroCodigos } = await supabaseAdmin
+    .from("plano_contas")
+    .select("codigo")
+    .eq("empresa_id", contexto.empresaId)
+    .eq("grupo_dre", grupoDre);
+  if (erroCodigos) return { erro: "Não foi possível gerar o código da classificação.", valores };
+
+  const codigo = proximoCodigoConta(
+    grupoDre,
+    (existentes ?? []).map((row) => row.codigo),
+  );
   const { error } = await supabaseAdmin.from("plano_contas").insert({
     empresa_id: contexto.empresaId,
     codigo,
@@ -599,6 +791,8 @@ export async function criarCategoriaRapida(
 
   revalidarFinanceiro();
   revalidatePath("/cadastros/plano-de-contas");
+  revalidatePath("/financeiro/orcamento");
+  revalidatePath("/financeiro/relatorios", "layout");
   return { ok: true };
 }
 
@@ -653,9 +847,12 @@ export async function salvarPrevisto(
     { onConflict: "empresa_id,plano_conta_id,competencia" },
   );
 
-  if (error) return { erro: "Não foi possível salvar o previsto.", valores };
+  if (error) return { erro: "Não foi possível salvar o orçado.", valores };
+
+  // Alinha a competência global ao mês salvo para a lista/KPIs refletirem o cadastro.
+  await definirCompetencia(competencia.slice(0, 7));
   revalidarFinanceiro();
-  return { ok: true };
+  return { ok: true, valores: { ...valores, competencia: competencia.slice(0, 7) } };
 }
 
 export async function excluirPrevisto(
@@ -686,6 +883,7 @@ function revalidarFinanceiro() {
   for (const rota of [
     "/",
     "/financeiro/fluxo-de-caixa",
+    "/financeiro/extrato",
     "/financeiro/contas-a-pagar",
     "/financeiro/contas-a-receber",
     "/financeiro/dre",
