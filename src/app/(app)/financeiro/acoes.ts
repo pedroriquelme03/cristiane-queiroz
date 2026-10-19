@@ -822,6 +822,9 @@ export async function salvarPrevisto(
     campos.valor = "Informe um valor previsto maior ou igual a zero.";
   }
   if (Object.keys(campos).length) return { campos, valores };
+  // Após a validação acima, competência e valor estão definidos.
+  const competenciaSalva = competencia as string;
+  const valorSalvo = valorInformado as number;
 
   if (!(await planoContaPertenceAEmpresa(contexto.empresaId, planoContaId))) {
     return { campos: { planoContaId: "Conta inválida para esta empresa." }, valores };
@@ -835,13 +838,13 @@ export async function salvarPrevisto(
   if (!conta) return { campos: { planoContaId: "Conta não encontrada." }, valores };
 
   // Na DRE, receitas entram positivas e demais grupos negativos (como o realizado).
-  const valorPrevisto = conta.tipo === "receita" ? valorInformado! : -Math.abs(valorInformado!);
+  const valorPrevisto = conta.tipo === "receita" ? valorSalvo : -Math.abs(valorSalvo);
 
   const { error } = await supabaseAdmin.from("orcamentos").upsert(
     {
       empresa_id: contexto.empresaId,
       plano_conta_id: planoContaId,
-      competencia,
+      competencia: competenciaSalva,
       valor_previsto: valorPrevisto,
     },
     { onConflict: "empresa_id,plano_conta_id,competencia" },
@@ -850,9 +853,10 @@ export async function salvarPrevisto(
   if (error) return { erro: "Não foi possível salvar o orçado.", valores };
 
   // Alinha a competência global ao mês salvo para a lista/KPIs refletirem o cadastro.
-  await definirCompetencia(competencia.slice(0, 7));
+  const competenciaMes = competenciaSalva.slice(0, 7);
+  await definirCompetencia(competenciaMes);
   revalidarFinanceiro();
-  return { ok: true, valores: { ...valores, competencia: competencia.slice(0, 7) } };
+  return { ok: true, valores: { ...valores, competencia: competenciaMes } };
 }
 
 export async function excluirPrevisto(
