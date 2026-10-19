@@ -96,6 +96,8 @@ export const ABAS_FINANCEIRO: { href: string; rotulo: string; recurso: RecursoPl
   { href: "/financeiro/receitas", rotulo: "Análise de receitas", recurso: "financeiro-avancado" },
   { href: "/financeiro/dre", rotulo: "DRE gerencial", recurso: "financeiro-avancado" },
   { href: "/financeiro/orcamento", rotulo: "Orçamento", recurso: "financeiro-avancado" },
+  { href: "/financeiro/vendas", rotulo: "Vendas (PDV)", recurso: "financeiro-avancado" },
+  { href: "/financeiro/folha", rotulo: "Apuração da folha", recurso: "financeiro-avancado" },
   { href: "/financeiro/importar", rotulo: "Importar planilha", recurso: "financeiro-avancado" },
   { href: "/financeiro/relatorios", rotulo: "Relatórios", recurso: "financeiro-basico" },
 ];
