@@ -1,11 +1,13 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import {
   AlertTriangle,
   ArrowLeft,
+  BookmarkCheck,
   CheckCircle2,
   FileSpreadsheet,
+  Trash2,
   Upload,
   X,
 } from "lucide-react";
@@ -14,6 +16,10 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Kpi } from "@/components/ui/kpi";
 import {
+  excluirModeloImportacao,
+  salvarModeloImportacao,
+} from "@/app/(app)/financeiro/importar/acoes";
+import {
   ESQUEMAS,
   aplicarRegrasDoTipo,
   sugerirMapeamento,
@@ -21,7 +27,20 @@ import {
   type LinhaValidada,
   type TipoImportacao,
 } from "@/lib/importacao/esquemas";
-import { lerArquivo, type PlanilhaLida } from "@/lib/importacao/leitor";
+import {
+  lerArquivo,
+  montarPlanilha,
+  type ArquivoBruto,
+  type OpcoesLeitura,
+  type PlanilhaLida,
+} from "@/lib/importacao/leitor";
+import {
+  aplicarMapaDoModelo,
+  assinaturaDe,
+  detectarModelo,
+  mapaParaConfig,
+  type ModeloImportacao,
+} from "@/lib/importacao/modelos";
 import { data as formatarData, moeda } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -36,41 +55,117 @@ const ETAPAS: { chave: Etapa; rotulo: string }[] = [
 /** Limite de linhas mostradas na conferência; a validação roda em todas. */
 const MAX_PREVIEW = 50;
 
-export function AssistenteImportacao() {
+/** Linhas cruas mostradas para o usuário apontar onde está o cabeçalho. */
+const LINHAS_TOPO = 12;
+
+/** Monta a planilha e o mapeamento para um conjunto de opções e modelo. */
+function prepararPlanilha(
+  bruto: ArquivoBruto,
+  opcoes: OpcoesLeitura,
+  tipo: TipoImportacao,
+  modelo: ModeloImportacao | null,
+) {
+  const planilha = montarPlanilha(bruto, opcoes);
+  const campos = ESQUEMAS[tipo].campos;
+  const sugestao = sugerirMapeamento(planilha.cabecalhos, campos);
+  const mapa = modelo
+    ? aplicarMapaDoModelo(planilha.cabecalhos, campos, sugestao, modelo.config)
+    : sugestao;
+  return { planilha, mapa };
+}
+
+const opcoesDoModelo = (modelo: ModeloImportacao): OpcoesLeitura => ({
+  aba: modelo.config.aba,
+  linhaCabecalho: modelo.config.linhaCabecalho,
+  ignorarLinhasQueComecam: modelo.config.ignorarLinhasQueComecam,
+});
+
+export function AssistenteImportacao({
+  empresaId,
+  modelosIniciais,
+  podeSalvarModelo,
+}: {
+  empresaId: string;
+  modelosIniciais: ModeloImportacao[];
+  podeSalvarModelo: boolean;
+}) {
   const [etapa, setEtapa] = useState<Etapa>("arquivo");
   const [tipo, setTipo] = useState<TipoImportacao>("lancamentos");
+  const [bruto, setBruto] = useState<ArquivoBruto | null>(null);
+  const [opcoes, setOpcoes] = useState<OpcoesLeitura>({});
   const [planilha, setPlanilha] = useState<PlanilhaLida | null>(null);
   const [nomeArquivo, setNomeArquivo] = useState("");
   const [mapa, setMapa] = useState<Record<string, number | null>>({});
+  const [modelos, setModelos] = useState(modelosIniciais);
+  const [modeloId, setModeloId] = useState<string | null>(null);
+  const [modeloDetectado, setModeloDetectado] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const esquema = ESQUEMAS[tipo];
+  const modelo = modelos.find((m) => m.id === modeloId) ?? null;
 
   async function receberArquivo(arquivo: File | undefined) {
     if (!arquivo) return;
     setErro(null);
     setCarregando(true);
     try {
-      const lida = await lerArquivo(arquivo);
-      setPlanilha(lida);
+      const lido = await lerArquivo(arquivo);
+      const detectado = detectarModelo(lido, modelos, tipo);
+      const novasOpcoes = detectado ? opcoesDoModelo(detectado.modelo) : {};
+      const preparado = prepararPlanilha(lido, novasOpcoes, tipo, detectado?.modelo ?? null);
+
+      setBruto(lido);
+      setOpcoes(novasOpcoes);
+      setModeloId(detectado?.modelo.id ?? null);
+      setModeloDetectado(Boolean(detectado));
+      setPlanilha(preparado.planilha);
+      setMapa(preparado.mapa);
       setNomeArquivo(arquivo.name);
-      setMapa(sugerirMapeamento(lida.cabecalhos, esquema.campos));
       setEtapa("mapeamento");
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Não foi possível ler o arquivo.");
+      setBruto(null);
       setPlanilha(null);
     } finally {
       setCarregando(false);
     }
   }
 
+  /** Reaplica leitura e mapeamento; erros (ex.: linha vazia) ficam na tela. */
+  function reprocessar(
+    novasOpcoes: OpcoesLeitura,
+    novoModelo: ModeloImportacao | null,
+    novoTipo: TipoImportacao = tipo,
+  ) {
+    if (!bruto) return;
+    try {
+      const preparado = prepararPlanilha(bruto, novasOpcoes, novoTipo, novoModelo);
+      setPlanilha(preparado.planilha);
+      setMapa(preparado.mapa);
+      setErro(null);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Não foi possível ler o arquivo.");
+    }
+    setOpcoes(novasOpcoes);
+  }
+
+  function escolherModelo(id: string | null) {
+    const escolhido = modelos.find((m) => m.id === id) ?? null;
+    setModeloId(escolhido?.id ?? null);
+    setModeloDetectado(false);
+    reprocessar(escolhido ? opcoesDoModelo(escolhido) : {}, escolhido);
+  }
+
   // Revalida tudo sempre que o mapeamento muda
   const validadas = useMemo<LinhaValidada[]>(() => {
     if (!planilha) return [];
     return planilha.linhas.map((linha, i) =>
-      aplicarRegrasDoTipo(tipo, validarLinha(linha, i + 2, esquema.campos, mapa)),
+      aplicarRegrasDoTipo(
+        tipo,
+        validarLinha(linha, planilha.numeros[i], esquema.campos, mapa),
+      ),
     );
   }, [planilha, mapa, esquema.campos, tipo]);
 
@@ -82,7 +177,11 @@ export function AssistenteImportacao() {
   );
 
   function reiniciar() {
+    setBruto(null);
     setPlanilha(null);
+    setOpcoes({});
+    setModeloId(null);
+    setModeloDetectado(false);
     setNomeArquivo("");
     setMapa({});
     setErro(null);
@@ -92,9 +191,50 @@ export function AssistenteImportacao() {
 
   function trocarTipo(novo: TipoImportacao) {
     setTipo(novo);
-    if (planilha) {
-      setMapa(sugerirMapeamento(planilha.cabecalhos, ESQUEMAS[novo].campos));
+    // Modelo é por tipo: o atual não vale para o outro
+    if (modelo && modelo.tipo !== novo) {
+      setModeloId(null);
+      setModeloDetectado(false);
+      reprocessar(opcoes, null, novo);
+    } else {
+      reprocessar(opcoes, modelo, novo);
     }
+  }
+
+  async function salvarModelo(nome: string, atualizar: boolean) {
+    if (!planilha) return { ok: false as const, erro: "Nenhum arquivo carregado." };
+    const resultado = await salvarModeloImportacao({
+      empresaId,
+      id: atualizar ? modelo?.id : undefined,
+      tipo,
+      nome,
+      config: {
+        aba: planilha.abas.length > 1 ? planilha.aba : null,
+        linhaCabecalho: opcoes.linhaCabecalho ?? null,
+        ignorarLinhasQueComecam: opcoes.ignorarLinhasQueComecam ?? [],
+        mapa: mapaParaConfig(planilha.cabecalhos, mapa),
+      },
+      assinatura: assinaturaDe(planilha.cabecalhos),
+    });
+    if (resultado.ok) {
+      setModelos((atual) =>
+        [...atual.filter((m) => m.id !== resultado.modelo.id), resultado.modelo].sort((a, b) =>
+          a.nome.localeCompare(b.nome, "pt-BR"),
+        ),
+      );
+      setModeloId(resultado.modelo.id);
+      setModeloDetectado(false);
+    }
+    return resultado;
+  }
+
+  async function excluirModelo(id: string) {
+    const resultado = await excluirModeloImportacao(empresaId, id);
+    if (resultado.ok) {
+      setModelos((atual) => atual.filter((m) => m.id !== id));
+      if (modeloId === id) setModeloId(null);
+    }
+    return resultado;
   }
 
   return (
@@ -121,17 +261,39 @@ export function AssistenteImportacao() {
         />
       ) : null}
 
-      {etapa === "mapeamento" && planilha ? (
-        <EtapaMapeamento
-          esquema={esquema}
-          planilha={planilha}
-          nomeArquivo={nomeArquivo}
-          mapa={mapa}
-          onMapa={setMapa}
-          obrigatoriosFaltando={obrigatoriosFaltando.map((c) => c.rotulo)}
-          onVoltar={reiniciar}
-          onAvancar={() => setEtapa("conferencia")}
-        />
+      {etapa === "mapeamento" && planilha && bruto ? (
+        <>
+          <PainelLeitura
+            bruto={bruto}
+            planilha={planilha}
+            opcoes={opcoes}
+            modelos={modelos.filter((m) => m.tipo === tipo)}
+            modelo={modelo}
+            modeloDetectado={modeloDetectado}
+            onModelo={escolherModelo}
+            onOpcoes={(novas) => reprocessar(novas, modelo)}
+          />
+          <EtapaMapeamento
+            esquema={esquema}
+            planilha={planilha}
+            nomeArquivo={nomeArquivo}
+            mapa={mapa}
+            onMapa={setMapa}
+            obrigatoriosFaltando={obrigatoriosFaltando.map((c) => c.rotulo)}
+            onVoltar={reiniciar}
+            onAvancar={() => setEtapa("conferencia")}
+            rodape={
+              podeSalvarModelo ? (
+                <SalvarModelo
+                  modelo={modelo?.empresaId ? modelo : null}
+                  nomeSugerido={modelo?.nome ?? nomeSemExtensao(nomeArquivo)}
+                  onSalvar={salvarModelo}
+                  onExcluir={excluirModelo}
+                />
+              ) : null
+            }
+          />
+        </>
       ) : null}
 
       {etapa === "conferencia" && planilha ? (
@@ -148,6 +310,8 @@ export function AssistenteImportacao() {
     </>
   );
 }
+
+const nomeSemExtensao = (nome: string) => nome.replace(/\.[^.]+$/, "");
 
 // ---------------------------------------------------------------------------
 
@@ -233,7 +397,7 @@ function EtapaArquivo({
       <Card>
         <CardHeader
           titulo="Arquivo"
-          descricao="Excel (.xlsx, .xls, .ods) ou CSV. A primeira linha deve ser o cabeçalho."
+          descricao="Excel (.xlsx, .xls, .ods) ou CSV. Se o cabeçalho não estiver na primeira linha, você ajusta na próxima etapa."
         />
         <CardBody>
           <div
@@ -292,6 +456,7 @@ function EtapaMapeamento({
   obrigatoriosFaltando,
   onVoltar,
   onAvancar,
+  rodape,
 }: {
   esquema: (typeof ESQUEMAS)[TipoImportacao];
   planilha: PlanilhaLida;
@@ -301,6 +466,7 @@ function EtapaMapeamento({
   obrigatoriosFaltando: string[];
   onVoltar: () => void;
   onAvancar: () => void;
+  rodape?: React.ReactNode;
 }) {
   const detectadas = Object.values(mapa).filter((v) => v !== null).length;
 
@@ -393,6 +559,8 @@ function EtapaMapeamento({
             Faltam colunas obrigatórias: {obrigatoriosFaltando.join(", ")}.
           </p>
         ) : null}
+
+        {rodape}
 
         <div className="flex justify-end border-t border-border pt-4">
           <button
@@ -613,5 +781,288 @@ function EtapaConferencia({
         </CardBody>
       </Card>
     </>
+  );
+}
+
+function PainelLeitura({
+  bruto,
+  planilha,
+  opcoes,
+  modelos,
+  modelo,
+  modeloDetectado,
+  onModelo,
+  onOpcoes,
+}: {
+  bruto: ArquivoBruto;
+  planilha: PlanilhaLida;
+  opcoes: OpcoesLeitura;
+  modelos: ModeloImportacao[];
+  modelo: ModeloImportacao | null;
+  modeloDetectado: boolean;
+  onModelo: (id: string | null) => void;
+  onOpcoes: (o: OpcoesLeitura) => void;
+}) {
+  const aba = bruto.abas.find((a) => a.nome === planilha.aba) ?? bruto.abas[0];
+  const topo = aba.matriz.slice(0, LINHAS_TOPO);
+  const largura = Math.min(
+    8,
+    Math.max(1, ...topo.map((l) => l.length)),
+  );
+  const [ignorarTexto, setIgnorarTexto] = useState(
+    (opcoes.ignorarLinhasQueComecam ?? []).join(", "),
+  );
+
+  // Ao trocar de modelo as opções mudam por fora; o campo de texto acompanha
+  const ignorarAtual = (opcoes.ignorarLinhasQueComecam ?? []).join(", ");
+  const [ultimoIgnorar, setUltimoIgnorar] = useState(ignorarAtual);
+  if (ignorarAtual !== ultimoIgnorar) {
+    setUltimoIgnorar(ignorarAtual);
+    setIgnorarTexto(ignorarAtual);
+  }
+
+  const aplicarIgnorar = () => {
+    const lista = ignorarTexto
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    onOpcoes({ ...opcoes, ignorarLinhasQueComecam: lista });
+  };
+
+  return (
+    <Card>
+      <CardHeader
+        titulo="Leitura do relatório"
+        descricao="Modelo salvo, aba, linha do cabeçalho e linhas a descartar"
+      />
+      <CardBody className="space-y-4">
+        {modelo && modeloDetectado ? (
+          <div className="flex items-start gap-2.5 rounded-lg border border-positive/20 bg-positive-soft px-4 py-3">
+            <BookmarkCheck className="mt-0.5 size-4 shrink-0 text-positive" aria-hidden />
+            <p className="text-sm">
+              Reconhecemos este relatório: modelo <strong>{modelo.nome}</strong> aplicado.
+              Confira as colunas abaixo.
+            </p>
+          </div>
+        ) : null}
+
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="space-y-1">
+            <label htmlFor="modelo-importacao" className="text-sm font-medium">
+              Modelo
+            </label>
+            <select
+              id="modelo-importacao"
+              value={modelo?.id ?? ""}
+              onChange={(e) => onModelo(e.target.value || null)}
+              className="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-sm"
+            >
+              <option value="">Nenhum (detectar colunas)</option>
+              {modelos.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.nome}
+                  {m.empresaId ? "" : " (padrão)"}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {bruto.abas.length > 1 ? (
+            <div className="space-y-1">
+              <label htmlFor="aba-importacao" className="text-sm font-medium">
+                Aba
+              </label>
+              <select
+                id="aba-importacao"
+                value={planilha.aba}
+                // A linha do cabeçalho de uma aba não vale para outra
+                onChange={(e) => onOpcoes({ ...opcoes, aba: e.target.value, linhaCabecalho: null })}
+                className="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-sm"
+              >
+                {bruto.abas.map((a) => (
+                  <option key={a.nome} value={a.nome}>
+                    {a.nome}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+
+          <div className="space-y-1">
+            <label htmlFor="linha-cabecalho" className="text-sm font-medium">
+              Linha do cabeçalho
+            </label>
+            <input
+              id="linha-cabecalho"
+              type="number"
+              min={1}
+              inputMode="numeric"
+              value={opcoes.linhaCabecalho ?? ""}
+              placeholder={`Automático (${planilha.linhaCabecalho})`}
+              onChange={(e) => {
+                const n = Number(e.target.value);
+                onOpcoes({
+                  ...opcoes,
+                  linhaCabecalho: e.target.value && n >= 1 ? Math.floor(n) : null,
+                });
+              }}
+              className="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-sm tabular"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label htmlFor="ignorar-linhas" className="text-sm font-medium">
+              Ignorar linhas que começam com
+            </label>
+            <input
+              id="ignorar-linhas"
+              type="text"
+              value={ignorarTexto}
+              placeholder="Total, Subtotal, Saldo anterior"
+              onChange={(e) => setIgnorarTexto(e.target.value)}
+              onBlur={aplicarIgnorar}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") aplicarIgnorar();
+              }}
+              className="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-sm"
+            />
+            <p className="text-xs text-muted-foreground">
+              Separe por vírgula.
+              {planilha.ignoradas > 0
+                ? ` ${planilha.ignoradas} linha(s) descartada(s).`
+                : ""}
+            </p>
+          </div>
+        </div>
+
+        <div>
+          <p className="mb-1.5 text-xs text-muted-foreground">
+            Início da aba: clique na linha que contém os nomes das colunas.
+          </p>
+          <div className="overflow-x-auto rounded-lg border border-border">
+            <table className="w-full text-xs">
+              <tbody>
+                {topo.map((linha, i) => {
+                  const numero = aba.primeiraLinha + i;
+                  const ehCabecalho = numero === planilha.linhaCabecalho;
+                  return (
+                    <tr
+                      key={numero}
+                      onClick={() => onOpcoes({ ...opcoes, linhaCabecalho: numero })}
+                      className={cn(
+                        "cursor-pointer border-b border-border last:border-0",
+                        ehCabecalho ? "bg-brand-soft font-medium" : "hover:bg-surface-muted",
+                      )}
+                    >
+                      <th
+                        scope="row"
+                        className="w-10 px-2 py-1 text-right font-normal tabular text-muted-foreground"
+                      >
+                        {numero}
+                      </th>
+                      {Array.from({ length: largura }, (_, c) => (
+                        <td key={c} className="max-w-40 truncate px-2 py-1 whitespace-nowrap">
+                          {linha[c] == null ? "" : String(linha[c])}
+                        </td>
+                      ))}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </CardBody>
+    </Card>
+  );
+}
+
+function SalvarModelo({
+  modelo,
+  nomeSugerido,
+  onSalvar,
+  onExcluir,
+}: {
+  /** Modelo da própria empresa em uso (globais não são editáveis aqui). */
+  modelo: ModeloImportacao | null;
+  nomeSugerido: string;
+  onSalvar: (nome: string, atualizar: boolean) => Promise<{ ok: boolean; erro?: string }>;
+  onExcluir: (id: string) => Promise<{ ok: boolean; erro?: string }>;
+}) {
+  const [nome, setNome] = useState(nomeSugerido);
+  // Trocar de modelo no seletor traz o nome dele para o campo
+  const [ultimoSugerido, setUltimoSugerido] = useState(nomeSugerido);
+  if (nomeSugerido !== ultimoSugerido) {
+    setUltimoSugerido(nomeSugerido);
+    setNome(nomeSugerido);
+  }
+  const [mensagem, setMensagem] = useState<{ tom: "ok" | "erro"; texto: string } | null>(null);
+  const [pendente, iniciar] = useTransition();
+
+  const executar = (acao: () => Promise<{ ok: boolean; erro?: string }>, sucesso: string) =>
+    iniciar(async () => {
+      const resultado = await acao();
+      setMensagem(
+        resultado.ok
+          ? { tom: "ok", texto: sucesso }
+          : { tom: "erro", texto: resultado.erro ?? "Algo deu errado." },
+      );
+    });
+
+  const atualizar = Boolean(modelo) && nome.trim() === modelo?.nome;
+
+  return (
+    <div className="space-y-2 border-t border-border pt-4">
+      <p className="text-sm font-medium">Salvar como modelo desta empresa</p>
+      <p className="text-xs text-muted-foreground">
+        Na próxima importação deste relatório, aba, cabeçalho, linhas ignoradas e colunas
+        já vêm prontos.
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          type="text"
+          aria-label="Nome do modelo"
+          value={nome}
+          maxLength={80}
+          onChange={(e) => setNome(e.target.value)}
+          className="min-w-60 flex-1 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm sm:flex-none"
+        />
+        <button
+          type="button"
+          disabled={pendente || !nome.trim()}
+          onClick={() =>
+            executar(
+              () => onSalvar(nome.trim(), atualizar),
+              atualizar ? "Modelo atualizado." : "Modelo salvo.",
+            )
+          }
+          className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {pendente ? "Salvando…" : atualizar ? "Atualizar modelo" : "Salvar modelo"}
+        </button>
+        {modelo ? (
+          <button
+            type="button"
+            disabled={pendente}
+            onClick={() => {
+              if (!window.confirm(`Excluir o modelo "${modelo.nome}"?`)) return;
+              executar(() => onExcluir(modelo.id), "Modelo excluído.");
+            }}
+            className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-muted-foreground hover:text-negative disabled:opacity-40"
+          >
+            <Trash2 className="size-3.5" aria-hidden />
+            Excluir modelo
+          </button>
+        ) : null}
+      </div>
+      {mensagem ? (
+        <p
+          role={mensagem.tom === "erro" ? "alert" : "status"}
+          className={cn("text-xs", mensagem.tom === "erro" ? "text-negative" : "text-positive")}
+        >
+          {mensagem.texto}
+        </p>
+      ) : null}
+    </div>
   );
 }

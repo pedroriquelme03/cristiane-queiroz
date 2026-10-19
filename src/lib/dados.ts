@@ -12,6 +12,9 @@ import {
   mesDe,
 } from "@/lib/competencia";
 import { getCompetenciaSelecionada } from "@/lib/competencia-servidor";
+import { configModeloSchema, type ModeloImportacao } from "@/lib/importacao/modelos";
+import type { ApuracaoFolha, ConfigRubrica, FuncionarioFolha } from "@/lib/folha";
+import type { RelatorioVendasSalvo } from "@/lib/vendas";
 import type {
   Alerta,
   AvaliacaoMaturidade,
@@ -247,6 +250,203 @@ export async function getContasBancarias(empresaIdParam?: string): Promise<Conta
     saldoInicial: Number(row.saldo_inicial),
     ativo: Boolean(row.ativo),
   }));
+}
+
+/** Modelos de importação da empresa e os globais (empresa_id nulo). */
+export async function getModelosImportacao(
+  empresaIdParam?: string,
+): Promise<ModeloImportacao[]> {
+  const empresaId = await resolverEmpresaId(empresaIdParam);
+  // O id entra num filtro .or() em texto: só aceita UUID para não abrir injeção
+  if (empresaId && !/^[0-9a-f-]{36}$/i.test(empresaId)) return [];
+
+  const supabase = await criarSupabaseObrigatorio();
+  let consulta = supabase
+    .from("modelos_importacao")
+    .select("id, empresa_id, tipo, nome, config, assinatura")
+    .order("nome");
+  consulta = empresaId
+    ? consulta.or(`empresa_id.is.null,empresa_id.eq.${empresaId}`)
+    : consulta.is("empresa_id", null);
+
+  const { data, error } = await consulta;
+  if (error) {
+    // Migration 0022 ainda não aplicada: o assistente segue funcionando sem modelos
+    if (/modelos_importacao/i.test(error.message)) return [];
+    throw new Error("Nao foi possivel carregar os modelos de importacao.");
+  }
+
+  return (data ?? []).flatMap((row) => {
+    const config = configModeloSchema.safeParse(row.config ?? {});
+    if (!config.success) return [];
+    return [
+      {
+        id: row.id,
+        empresaId: row.empresa_id,
+        tipo: row.tipo as ModeloImportacao["tipo"],
+        nome: row.nome,
+        config: config.data,
+        assinatura: (row.assinatura as string[] | null) ?? [],
+      },
+    ];
+  });
+}
+
+/** Relatórios de vendas do PDV importados no ano, de todas as origens. */
+export async function getRelatoriosVendas(
+  ano: number,
+  empresaIdParam?: string,
+): Promise<RelatorioVendasSalvo[]> {
+  const empresaId = await resolverEmpresaId(empresaIdParam);
+  if (!empresaId) return [];
+
+  const supabase = await criarSupabaseObrigatorio();
+  const { data, error } = await supabase
+    .from("vendas_relatorios")
+    .select(
+      "id, competencia, origem, arquivo_nome, periodo_inicio, periodo_fim, total_valor, total_quantidade, resumos, updated_at",
+    )
+    .eq("empresa_id", empresaId)
+    .gte("competencia", `${ano}-01-01`)
+    .lte("competencia", `${ano}-12-01`)
+    .order("competencia")
+    .order("origem");
+
+  if (error) {
+    // Migration 0024 ainda não aplicada
+    if (/vendas_relatorios/i.test(error.message)) return [];
+    throw new Error("Nao foi possivel carregar os relatorios de vendas.");
+  }
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    competencia: String(row.competencia).slice(0, 10),
+    origem: row.origem,
+    arquivoNome: row.arquivo_nome,
+    periodoInicio: row.periodo_inicio,
+    periodoFim: row.periodo_fim,
+    totalValor: Number(row.total_valor),
+    totalQuantidade: Number(row.total_quantidade),
+    resumos: row.resumos ?? {},
+    atualizadoEm: row.updated_at,
+  }));
+}
+
+/** Anos com algum relatório de vendas (para o seletor de ano). */
+export async function getAnosVendas(empresaIdParam?: string): Promise<number[]> {
+  const empresaId = await resolverEmpresaId(empresaIdParam);
+  if (!empresaId) return [];
+
+  const supabase = await criarSupabaseObrigatorio();
+  const { data, error } = await supabase
+    .from("vendas_relatorios")
+    .select("competencia")
+    .eq("empresa_id", empresaId);
+  if (error) return [];
+  return [...new Set((data ?? []).map((r) => Number(String(r.competencia).slice(0, 4))))].sort();
+}
+
+/** Meses ("AAAA-MM-01") com Extrato Mensal importado. */
+export async function getCompetenciasFolha(empresaIdParam?: string): Promise<string[]> {
+  const empresaId = await resolverEmpresaId(empresaIdParam);
+  if (!empresaId) return [];
+
+  const supabase = await criarSupabaseObrigatorio();
+  const { data, error } = await supabase
+    .from("folha_apuracoes")
+    .select("competencia")
+    .eq("empresa_id", empresaId)
+    .order("competencia");
+
+  if (error) {
+    // Migration 0023 ainda não aplicada
+    if (/folha_apuracoes/i.test(error.message)) return [];
+    throw new Error("Nao foi possivel carregar as competencias da folha.");
+  }
+  return (data ?? []).map((row) => String(row.competencia).slice(0, 10));
+}
+
+export async function getApuracaoFolha(
+  competencia: string,
+  empresaIdParam?: string,
+): Promise<{ apuracao: ApuracaoFolha; funcionarios: FuncionarioFolha[] } | null> {
+  const empresaId = await resolverEmpresaId(empresaIdParam);
+  if (!empresaId) return null;
+
+  const supabase = await criarSupabaseObrigatorio();
+  const { data: row, error } = await supabase
+    .from("folha_apuracoes")
+    .select(
+      "id, competencia, arquivo_nome, empresa_relatorio, totais, encargos, situacoes, resumo_rubricas, manuais, updated_at",
+    )
+    .eq("empresa_id", empresaId)
+    .eq("competencia", competencia)
+    .maybeSingle();
+
+  if (error) {
+    if (/folha_apuracoes/i.test(error.message)) return null;
+    throw new Error("Nao foi possivel carregar a apuracao da folha.");
+  }
+  if (!row) return null;
+
+  const { data: linhas, error: erroFunc } = await supabase
+    .from("folha_funcionarios")
+    .select(
+      "id, matricula, nome, situacao, departamento, cargo, salario, proventos, descontos, liquido, base_inss, base_fgts, valor_fgts, base_irrf, rubricas, observacoes",
+    )
+    .eq("apuracao_id", row.id)
+    .order("nome");
+  if (erroFunc) throw new Error("Nao foi possivel carregar os funcionarios da folha.");
+
+  return {
+    apuracao: {
+      id: row.id,
+      competencia: String(row.competencia).slice(0, 10),
+      arquivoNome: row.arquivo_nome,
+      empresaRelatorio: row.empresa_relatorio ?? { codigo: null, nome: "", cnpj: null },
+      totais: row.totais ?? { proventos: 0, descontos: 0, liquido: 0 },
+      encargos: row.encargos ?? {},
+      situacoes: row.situacoes ?? {},
+      resumoRubricas: row.resumo_rubricas ?? [],
+      manuais: row.manuais ?? {},
+      atualizadoEm: row.updated_at,
+    },
+    funcionarios: (linhas ?? []).map((f) => ({
+      id: f.id,
+      matricula: f.matricula,
+      nome: f.nome,
+      situacao: f.situacao,
+      departamento: f.departamento,
+      cargo: f.cargo,
+      salario: f.salario === null ? null : Number(f.salario),
+      proventos: Number(f.proventos),
+      descontos: Number(f.descontos),
+      liquido: Number(f.liquido),
+      baseInss: Number(f.base_inss),
+      baseFgts: Number(f.base_fgts),
+      valorFgts: Number(f.valor_fgts),
+      baseIrrf: Number(f.base_irrf),
+      rubricas: f.rubricas ?? [],
+      observacoes: f.observacoes ?? [],
+    })),
+  };
+}
+
+/** Configuração (efeito e categoria) das rubricas da folha da empresa. */
+export async function getConfigRubricasFolha(empresaIdParam?: string): Promise<ConfigRubrica[]> {
+  const empresaId = await resolverEmpresaId(empresaIdParam);
+  if (!empresaId) return [];
+
+  const supabase = await criarSupabaseObrigatorio();
+  const { data, error } = await supabase
+    .from("folha_rubricas")
+    .select("codigo, tipo, efeito, categoria")
+    .eq("empresa_id", empresaId);
+
+  if (error) {
+    if (/folha_rubricas/i.test(error.message)) return [];
+    throw new Error("Nao foi possivel carregar as rubricas da folha.");
+  }
+  return (data ?? []) as ConfigRubrica[];
 }
 
 export async function getCompetencias(empresaIdParam?: string): Promise<string[]> {

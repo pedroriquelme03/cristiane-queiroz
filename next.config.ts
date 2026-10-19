@@ -8,6 +8,12 @@ const nextConfig: NextConfig = {
     // Next escolhia aquele diretório como raiz do workspace. Fixar aqui.
     root: path.resolve(import.meta.dirname),
   },
+  experimental: {
+    serverActions: {
+      // O Extrato Mensal já lido (funcionários + rubricas) passa de 1MB em folhas grandes
+      bodySizeLimit: "4mb",
+    },
+  },
 };
 
 export default nextConfig;
