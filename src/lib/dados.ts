@@ -271,11 +271,11 @@ export async function getContasBancarias(empresaIdParam?: string): Promise<Conta
     .eq("empresa_id", empresaId)
     .not("conta_bancaria_id", "is", null);
   if (movimentosQuery.error && /impacta_fluxo/i.test(movimentosQuery.error.message)) {
-    movimentosQuery = await supabase
+    movimentosQuery = (await supabase
       .from("lancamentos")
       .select("conta_bancaria_id, tipo, valor, data")
       .eq("empresa_id", empresaId)
-      .not("conta_bancaria_id", "is", null);
+      .not("conta_bancaria_id", "is", null)) as typeof movimentosQuery;
   }
 
   const movimentoPorConta = new Map<string, number>();
@@ -819,7 +819,7 @@ export async function getPrevistoPeriodo(
       .in("status", ["aberto", "parcial"])
       .lte("vencimento", fim)
       .order("vencimento");
-    data = fallback.data;
+    data = fallback.data as typeof data;
     error = fallback.error;
   }
 
@@ -928,7 +928,7 @@ export async function getLancamentos(
       .gte("data", inicio)
       .lte("data", fim)
       .order("data", { ascending: false });
-    data = fallback.data;
+    data = fallback.data as typeof data;
     error = fallback.error;
   }
 
@@ -1057,7 +1057,7 @@ export async function getDre(
       .neq("status", "cancelado")
       .not("plano_conta_id", "is", null);
     if (retry.error) throw new Error("Nao foi possivel carregar os títulos da DRE.");
-    titulosDre = retry.data;
+    titulosDre = retry.data as typeof titulosDre;
   } else if (erroTitulos) {
     throw new Error("Nao foi possivel carregar os títulos da DRE.");
   }
@@ -1071,7 +1071,7 @@ export async function getDre(
       .neq("origem", "integracao")
       .not("plano_conta_id", "is", null);
     if (retry.error) throw new Error("Nao foi possivel carregar os lançamentos da DRE.");
-    lancamentosDre = retry.data;
+    lancamentosDre = retry.data as typeof lancamentosDre;
   } else if (erroLancamentos) {
     throw new Error("Nao foi possivel carregar os lançamentos da DRE.");
   }
@@ -1312,7 +1312,7 @@ export async function getMovimentosDre(
       .neq("status", "cancelado")
       .not("plano_conta_id", "is", null);
     if (retry.error) throw new Error("Nao foi possivel carregar os títulos da DRE.");
-    titulosMov = retry.data;
+    titulosMov = retry.data as typeof titulosMov;
   } else if (erroTitulos) {
     throw new Error("Nao foi possivel carregar os títulos da DRE.");
   }
@@ -1326,7 +1326,7 @@ export async function getMovimentosDre(
       .neq("origem", "integracao")
       .not("plano_conta_id", "is", null);
     if (retry.error) throw new Error("Nao foi possivel carregar os lançamentos da DRE.");
-    lancamentosMov = retry.data;
+    lancamentosMov = retry.data as typeof lancamentosMov;
   } else if (erroLancamentos) {
     throw new Error("Nao foi possivel carregar os lançamentos da DRE.");
   }
