@@ -3,6 +3,7 @@
  * custo. Funções puras — rodam no servidor e no navegador (filtros por setor e
  * funcionário recalculam tudo sem ir ao banco).
  */
+import type { ColunaRubrica } from "@/lib/folha-analitica";
 import { normalizar } from "@/lib/importacao/parsers";
 import type { RubricaExtrato, TipoRubrica } from "@/lib/importacao/adaptadores/extrato-mensal";
 
@@ -40,44 +41,14 @@ export interface ConfigRubrica {
   tipo: TipoRubrica;
   efeito: EfeitoRubrica;
   categoria: CategoriaCusto;
+  /** Coluna da tabela analítica; ausente = classificação automática. */
+  coluna?: ColunaRubrica | null;
 }
 
 export interface ManuaisFolha {
   fgts?: number;
   fgtsProvFerias?: number;
   fgtsProv13?: number;
-}
-
-export interface FuncionarioFolha {
-  id: string;
-  matricula: string;
-  nome: string;
-  situacao: string;
-  departamento: string | null;
-  cargo: string | null;
-  salario: number | null;
-  proventos: number;
-  descontos: number;
-  liquido: number;
-  baseInss: number;
-  baseFgts: number;
-  valorFgts: number;
-  baseIrrf: number;
-  rubricas: RubricaExtrato[];
-  observacoes: string[];
-}
-
-export interface ApuracaoFolha {
-  id: string;
-  competencia: string;
-  arquivoNome: string;
-  empresaRelatorio: { codigo: string | null; nome: string; cnpj: string | null };
-  totais: { proventos: number; descontos: number; liquido: number };
-  encargos: Record<string, number>;
-  situacoes: Record<string, number>;
-  resumoRubricas: RubricaExtrato[];
-  manuais: ManuaisFolha;
-  atualizadoEm: string;
 }
 
 export const chaveRubrica = (r: { codigo: string; tipo: TipoRubrica }) => `${r.tipo}:${r.codigo}`;
@@ -129,7 +100,7 @@ function somarReferencias(refs: string[]): string {
 }
 
 /** Agrega as rubricas dos funcionários (usado quando há filtro de setor/funcionário). */
-export function resumirRubricas(funcionarios: FuncionarioFolha[]): RubricaExtrato[] {
+export function resumirRubricas(funcionarios: { rubricas: RubricaExtrato[] }[]): RubricaExtrato[] {
   const grupos = new Map<string, { base: RubricaExtrato; refs: string[]; valor: number }>();
   for (const f of funcionarios) {
     for (const r of f.rubricas) {
@@ -219,7 +190,3 @@ export function calcularCusto(
 
   return { linhas, ignoradas, totalSalario, totalCusto };
 }
-
-/** "Depto 3" quando o extrato só traz o código do departamento. */
-export const rotuloSetor = (departamento: string | null) =>
-  departamento ? `Depto ${departamento}` : "Sem setor";

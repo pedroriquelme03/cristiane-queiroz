@@ -2,7 +2,11 @@ import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { LinkGerarRelatorio } from "@/components/relatorios/link-gerar-relatorio";
 import { Kpi } from "@/components/ui/kpi";
 import { RegistrosGrupoInterativos } from "@/components/financeiro/dre-interativa";
+import { FolhaNoDre } from "@/components/folha/folha-no-dre";
 import { getCompetenciaAtual, getDre, getMovimentosDre, intervaloDoMes } from "@/lib/dados";
+import { getFolhaParaDre } from "@/lib/dados-folha";
+import { empresaAtiva } from "@/lib/empresa-ativa";
+import { getSessao } from "@/lib/sessao";
 import { competenciaExtenso, moeda, percentual } from "@/lib/format";
 import type { GrupoDre } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -69,9 +73,12 @@ export default async function DrePage({
   const empresaId = typeof empresa === "string" ? empresa : undefined;
   const competencia = await getCompetenciaAtual();
   const { inicio, fim } = intervaloDoMes(competencia);
-  const [linhas, movimentos] = await Promise.all([
+  const empresaFolha = empresaAtiva(await getSessao(), empresaId);
+  const [linhas, movimentos, folha] = await Promise.all([
     getDre(inicio, fim, empresaId),
     getMovimentosDre(inicio, fim, empresaId),
+    // A folha é complementar: sem a migration 0025 o DRE segue normal
+    empresaFolha ? getFolhaParaDre(empresaFolha, competencia.slice(0, 7) + "-01").catch(() => null) : null,
   ]);
 
   const porGrupo = (grupo: GrupoDre) =>
@@ -196,6 +203,24 @@ export default async function DrePage({
           </div>
         </CardBody>
       </Card>
+
+      {folha ? (
+        <FolhaNoDre
+          competencia={competencia.slice(0, 7) + "-01"}
+          fechada={folha.fechada}
+          importada={folha.importada}
+          lancamentos={folha.lancamentos}
+          unidades={folha.unidades}
+          contas={linhas.map((l) => ({
+            id: l.planoContaId,
+            codigo: l.codigo,
+            nome: l.conta,
+            realizado: l.realizado,
+            despesaPessoal: l.grupoDre === "despesa_pessoal",
+          }))}
+          hrefFolha={`/financeiro/folha/${competencia.slice(5, 7)}?ano=${competencia.slice(0, 4)}${empresaId ? `&empresa=${empresaId}` : ""}`}
+        />
+      ) : null}
     </>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { useState } from "react";
 import { Calculator, ChevronRight, Minus, Plus } from "lucide-react";
 
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
@@ -8,13 +8,17 @@ import {
   ROTULO_CATEGORIA,
   calcularCusto,
   configDe,
-  rotuloSetor,
   totalFolha,
   type CategoriaCusto,
   type ConfigRubrica,
-  type FuncionarioFolha,
   type ManuaisFolha,
 } from "@/lib/folha";
+import {
+  classificar,
+  COLUNAS_DESCONTOS,
+  COLUNAS_PROVENTOS,
+  type ColunaRubrica,
+} from "@/lib/folha-analitica";
 import type { RubricaExtrato } from "@/lib/importacao/adaptadores/extrato-mensal";
 import { competenciaExtenso, moeda } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -44,7 +48,7 @@ export function ResumoPorRubrica({
     <Card>
       <CardHeader
         titulo={`Resumo por Rubrica — ${competenciaExtenso(competencia)}`}
-        descricao="Defina se cada rubrica soma (recebido) ou subtrai (retorna à empresa) no total da folha."
+        descricao="Defina se cada rubrica soma (recebido) ou subtrai (retorna à empresa) no total da folha, e em qual coluna da tabela analítica ela entra. Rubricas em amarelo não foram reconhecidas e precisam de classificação antes do fechamento."
         acao={
           <div className="text-right">
             <p className="text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
@@ -110,6 +114,9 @@ function ColunaRubricas({
                   <td className="py-1.5 pr-2 text-right font-medium tabular whitespace-nowrap">
                     {moeda(r.valor)}
                   </td>
+                  <td className="w-40 py-1.5 pr-2">
+                    <SeletorColuna r={r} configs={configs} podeEditar={podeEditar} onAlterar={onAlterar} />
+                  </td>
                   <td className="w-24 py-1.5 pr-5 text-right">
                     <button
                       type="button"
@@ -139,6 +146,55 @@ function ColunaRubricas({
         </table>
       </div>
     </div>
+  );
+}
+
+function SeletorColuna({
+  r,
+  configs,
+  podeEditar,
+  onAlterar,
+}: {
+  r: RubricaExtrato;
+  configs: Map<string, ConfigRubrica>;
+  podeEditar: boolean;
+  onAlterar: AlterarConfig;
+}) {
+  const colunasManuais = new Map<string, ColunaRubrica | null | undefined>(
+    [...configs.values()].map((c) => [`${c.tipo}:${c.codigo}`, c.coluna]),
+  );
+  const { coluna, origem } = classificar(r, colunasManuais);
+  const opcoes = r.tipo === "P" ? COLUNAS_PROVENTOS : COLUNAS_DESCONTOS;
+  return (
+    <select
+      aria-label={`Coluna analítica da rubrica ${r.codigo}`}
+      title={
+        origem === "manual"
+          ? "Classificada pela empresa"
+          : origem === "automatica"
+            ? "Classificada automaticamente pela descrição"
+            : "Não reconhecida: escolha a coluna"
+      }
+      value={origem === "nao_reconhecida" ? "" : coluna}
+      disabled={!podeEditar}
+      onChange={(e) => onAlterar(r, { coluna: (e.target.value || null) as ColunaRubrica | null })}
+      className={cn(
+        "w-full rounded-md border px-1.5 py-0.5 text-[11px]",
+        origem === "nao_reconhecida"
+          ? "border-warning/50 bg-warning-soft text-warning"
+          : origem === "manual"
+            ? "border-brand/40 bg-surface"
+            : "border-border bg-surface text-muted-foreground",
+      )}
+    >
+      {origem === "nao_reconhecida" ? <option value="">Não classificada…</option> : null}
+      {opcoes.map((c) => (
+        <option key={c.chave} value={c.chave}>
+          {c.rotulo}
+          {origem === "automatica" && c.chave === coluna ? " (auto)" : ""}
+        </option>
+      ))}
+    </select>
   );
 }
 
@@ -385,126 +441,6 @@ function LinhaManual({
         }}
         className="w-36 rounded-md border border-warning/40 bg-warning-soft px-2 py-1 text-right text-sm tabular disabled:opacity-60"
       />
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Funcionários
-
-export function TabelaFuncionariosFolha({ funcionarios }: { funcionarios: FuncionarioFolha[] }) {
-  const [aberto, setAberto] = useState<string | null>(null);
-  const colunas = 13;
-
-  return (
-    <Card>
-      <CardBody className="px-0 py-0">
-        <div className="max-h-[36rem] overflow-auto">
-          <table className="w-full text-xs">
-            <thead className="sticky top-0 z-10 bg-surface">
-              <tr className="border-b border-border text-[11px] tracking-wide text-muted-foreground uppercase">
-                {["Matríc.", "Funcionário", "Setor", "Cargo", "Situação"].map((c) => (
-                  <th key={c} scope="col" className="px-3 py-2 text-left font-semibold whitespace-nowrap first:pl-5">
-                    {c}
-                  </th>
-                ))}
-                {["Salário", "Proventos", "Descontos", "Líquido", "Base INSS", "Base FGTS", "Valor FGTS", "Base IRRF"].map(
-                  (c) => (
-                    <th key={c} scope="col" className="px-3 py-2 text-right font-semibold whitespace-nowrap last:pr-5">
-                      {c}
-                    </th>
-                  ),
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {funcionarios.map((f) => (
-                <Fragment key={f.id}>
-                  <tr
-                    onClick={() => setAberto((a) => (a === f.id ? null : f.id))}
-                    className={cn(
-                      "cursor-pointer border-b border-border hover:bg-surface-muted",
-                      aberto === f.id && "bg-surface-muted",
-                    )}
-                  >
-                    <td className="py-2 pr-3 pl-5 tabular text-muted-foreground">{f.matricula}</td>
-                    <td className="px-3 py-2 font-medium whitespace-nowrap">{f.nome}</td>
-                    <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{rotuloSetor(f.departamento)}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">{f.cargo ?? "—"}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">{f.situacao}</td>
-                    <td className="px-3 py-2 text-right tabular whitespace-nowrap">
-                      {f.salario === null ? "—" : moeda(f.salario)}
-                    </td>
-                    <td className="px-3 py-2 text-right text-serie-saldo tabular whitespace-nowrap">{moeda(f.proventos)}</td>
-                    <td className="px-3 py-2 text-right text-negative tabular whitespace-nowrap">{moeda(f.descontos)}</td>
-                    <td className="px-3 py-2 text-right font-semibold tabular whitespace-nowrap">{moeda(f.liquido)}</td>
-                    <td className="px-3 py-2 text-right text-muted-foreground tabular whitespace-nowrap">{moeda(f.baseInss)}</td>
-                    <td className="px-3 py-2 text-right text-muted-foreground tabular whitespace-nowrap">{moeda(f.baseFgts)}</td>
-                    <td className="px-3 py-2 text-right text-muted-foreground tabular whitespace-nowrap">{moeda(f.valorFgts)}</td>
-                    <td className="py-2 pr-5 pl-3 text-right text-muted-foreground tabular whitespace-nowrap">
-                      {moeda(f.baseIrrf)}
-                    </td>
-                  </tr>
-                  {aberto === f.id ? (
-                    <tr className="border-b border-border bg-surface-muted/50">
-                      <td colSpan={colunas} className="px-5 py-3">
-                        <DetalheFuncionario funcionario={f} />
-                      </td>
-                    </tr>
-                  ) : null}
-                </Fragment>
-              ))}
-              {funcionarios.length === 0 ? (
-                <tr>
-                  <td colSpan={colunas} className="px-5 py-8 text-center text-muted-foreground">
-                    Nenhum funcionário no filtro.
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
-      </CardBody>
-    </Card>
-  );
-}
-
-function DetalheFuncionario({ funcionario }: { funcionario: FuncionarioFolha }) {
-  const grupo = (tipo: "P" | "D") => funcionario.rubricas.filter((r) => r.tipo === tipo);
-  return (
-    <div className="space-y-2">
-      <div className="grid gap-4 md:grid-cols-2">
-        {(["P", "D"] as const).map((tipo) => (
-          <table key={tipo} className="w-full text-xs">
-            <thead>
-              <tr className="text-[11px] text-muted-foreground uppercase">
-                <th className="pb-1 text-left font-semibold" colSpan={4}>
-                  {tipo === "P" ? "Proventos" : "Descontos"}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {grupo(tipo).map((r, i) => (
-                <tr key={`${r.codigo}-${i}`}>
-                  <td className="w-12 py-0.5 text-muted-foreground tabular">{r.codigo}</td>
-                  <td className="py-0.5">{r.descricao}</td>
-                  <td className="py-0.5 pr-3 text-right text-muted-foreground tabular">{r.referencia}</td>
-                  <td className={cn("py-0.5 text-right tabular", tipo === "D" && "text-negative")}>
-                    {moeda(r.valor)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ))}
-      </div>
-      {funcionario.observacoes.length ? (
-        <ul className="space-y-0.5 text-[11px] text-muted-foreground">
-          {funcionario.observacoes.map((o, i) => (
-            <li key={i}>{o}</li>
-          ))}
-        </ul>
-      ) : null}
     </div>
   );
 }

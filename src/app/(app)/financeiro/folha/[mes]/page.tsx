@@ -2,21 +2,27 @@ import { notFound } from "next/navigation";
 
 import { AvisoSemEmpresa } from "@/components/cadastros/ui";
 import { AbasMesesFolha, PainelFolha } from "@/components/folha/painel-folha";
+import { getCompetenciasFolha } from "@/lib/dados";
 import {
-  getApuracaoFolha,
-  getCompetenciasFolha,
-  getConfigRubricasFolha,
-} from "@/lib/dados";
+  getConfigFolha,
+  getContratosEmprestimo,
+  getFolhaMeses,
+  getHistoricoFolha,
+  getIntegracaoDreFolha,
+  getMembrosFolha,
+  getNivelAcessoFolha,
+  getUnidadesFolha,
+} from "@/lib/dados-folha";
 import { empresaAtiva } from "@/lib/empresa-ativa";
 import { getSessao } from "@/lib/sessao";
 
-/** Uma aba por mês: /financeiro/folha/01 … /financeiro/folha/12, ano em ?ano=. */
+/** Uma aba por mês: /financeiro/folha/01 … /12, ano em ?ano=, comparativo em ?comparar=. */
 export default async function ApuracaoFolhaMesPage({
   params,
   searchParams,
 }: {
   params: Promise<{ mes: string }>;
-  searchParams: Promise<{ empresa?: string | string[]; ano?: string | string[] }>;
+  searchParams: Promise<{ empresa?: string | string[]; ano?: string | string[]; comparar?: string | string[] }>;
 }) {
   const [{ mes: mesParam }, busca, sessao] = await Promise.all([params, searchParams, getSessao()]);
   const mes = Number(mesParam);
@@ -27,7 +33,7 @@ export default async function ApuracaoFolhaMesPage({
 
   const competencias = await getCompetenciasFolha(empresaId);
 
-  // Sem ano na URL: o do último extrato importado, ou o ano corrente
+  // Sem ano na URL: o do último relatório importado, ou o ano corrente
   const anoBusca = Number(typeof busca.ano === "string" ? busca.ano : undefined);
   const ultima = competencias.at(-1);
   const ano =
@@ -38,24 +44,45 @@ export default async function ApuracaoFolhaMesPage({
         : new Date().getFullYear();
   const competencia = `${ano}-${mesParam}-01`;
 
-  const [dados, configs] = await Promise.all([
-    getApuracaoFolha(competencia, empresaId),
-    getConfigRubricasFolha(empresaId),
+  // Comparativo: só meses importados, no máximo 6
+  const comparar = (typeof busca.comparar === "string" ? busca.comparar.split(",") : [])
+    .filter((c) => c !== competencia && competencias.includes(c))
+    .slice(0, 6);
+
+  const ehAdmin = sessao.role === "admin";
+  const nivel = await getNivelAcessoFolha(sessao, empresaId);
+  const [meses, unidades, config, contratos, historico, integracao, membros] = await Promise.all([
+    getFolhaMeses(empresaId, [competencia, ...comparar], nivel),
+    getUnidadesFolha(empresaId),
+    getConfigFolha(empresaId),
+    nivel === "agregado" ? Promise.resolve([]) : getContratosEmprestimo(empresaId),
+    getHistoricoFolha(empresaId, competencia, nivel),
+    getIntegracaoDreFolha(empresaId),
+    ehAdmin ? getMembrosFolha(empresaId) : Promise.resolve([]),
   ]);
 
+  const atual = meses[0];
   return (
     <>
       <AbasMesesFolha competencia={competencia} importadas={competencias} />
       <PainelFolha
-        // Remonta ao trocar de mês para zerar filtros e edições locais
-        key={`${empresaId}:${competencia}:${dados?.apuracao.atualizadoEm ?? ""}`}
+        // Remonta ao trocar de mês ou reimportar, para zerar filtros e edições locais
+        key={`${empresaId}:${competencia}:${atual.apuracoes.map((a) => a.atualizadoEm).join(",")}:${atual.status.status}`}
         empresaId={empresaId}
         competencia={competencia}
         competenciasImportadas={competencias}
-        apuracao={dados?.apuracao ?? null}
-        funcionarios={dados?.funcionarios ?? []}
-        configsIniciais={configs}
-        podeEditar={sessao.role === "admin" || sessao.role === "cliente"}
+        nivel={nivel}
+        ehAdmin={ehAdmin}
+        perfilEdita={ehAdmin || sessao.role === "cliente"}
+        unidades={unidades}
+        config={config}
+        meses={meses}
+        contratos={contratos}
+        versoes={historico.versoes}
+        eventos={historico.eventos}
+        contasDre={integracao.contas}
+        planoContas={integracao.planoContas}
+        membros={membros}
       />
     </>
   );

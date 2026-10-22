@@ -5,7 +5,6 @@ import {
   resumirRubricas,
   totalFolha,
   type ConfigRubrica,
-  type FuncionarioFolha,
 } from "@/lib/folha";
 import type { RubricaExtrato } from "@/lib/importacao/adaptadores/extrato-mensal";
 
@@ -69,7 +68,7 @@ eq(
 );
 
 console.log("--- resumo filtrado ---");
-const func = (rubricas: RubricaExtrato[]) => ({ rubricas }) as FuncionarioFolha;
+const func = (rubricas: RubricaExtrato[]) => ({ rubricas });
 const agregado = resumirRubricas([
   func([r("200", "HORAS EXTRAS", "P", 10.5, "6:28"), r("204", "VALE", "D", 40, "40,00")]),
   func([r("200", "HORAS EXTRAS", "P", 20.25, "10:49"), r("204", "VALE", "D", 17.33, "40,00")]),

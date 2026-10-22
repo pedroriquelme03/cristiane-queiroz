@@ -13,7 +13,6 @@ import {
 } from "@/lib/competencia";
 import { getCompetenciaSelecionada } from "@/lib/competencia-servidor";
 import { configModeloSchema, type ModeloImportacao } from "@/lib/importacao/modelos";
-import type { ApuracaoFolha, ConfigRubrica, FuncionarioFolha } from "@/lib/folha";
 import type { RelatorioVendasSalvo } from "@/lib/vendas";
 import type {
   Alerta,
@@ -345,7 +344,7 @@ export async function getAnosVendas(empresaIdParam?: string): Promise<number[]> 
   return [...new Set((data ?? []).map((r) => Number(String(r.competencia).slice(0, 4))))].sort();
 }
 
-/** Meses ("AAAA-MM-01") com Extrato Mensal importado. */
+/** Meses ("AAAA-MM-01") com relatório da folha importado (de qualquer unidade). */
 export async function getCompetenciasFolha(empresaIdParam?: string): Promise<string[]> {
   const empresaId = await resolverEmpresaId(empresaIdParam);
   if (!empresaId) return [];
@@ -362,91 +361,8 @@ export async function getCompetenciasFolha(empresaIdParam?: string): Promise<str
     if (/folha_apuracoes/i.test(error.message)) return [];
     throw new Error("Nao foi possivel carregar as competencias da folha.");
   }
-  return (data ?? []).map((row) => String(row.competencia).slice(0, 10));
-}
-
-export async function getApuracaoFolha(
-  competencia: string,
-  empresaIdParam?: string,
-): Promise<{ apuracao: ApuracaoFolha; funcionarios: FuncionarioFolha[] } | null> {
-  const empresaId = await resolverEmpresaId(empresaIdParam);
-  if (!empresaId) return null;
-
-  const supabase = await criarSupabaseObrigatorio();
-  const { data: row, error } = await supabase
-    .from("folha_apuracoes")
-    .select(
-      "id, competencia, arquivo_nome, empresa_relatorio, totais, encargos, situacoes, resumo_rubricas, manuais, updated_at",
-    )
-    .eq("empresa_id", empresaId)
-    .eq("competencia", competencia)
-    .maybeSingle();
-
-  if (error) {
-    if (/folha_apuracoes/i.test(error.message)) return null;
-    throw new Error("Nao foi possivel carregar a apuracao da folha.");
-  }
-  if (!row) return null;
-
-  const { data: linhas, error: erroFunc } = await supabase
-    .from("folha_funcionarios")
-    .select(
-      "id, matricula, nome, situacao, departamento, cargo, salario, proventos, descontos, liquido, base_inss, base_fgts, valor_fgts, base_irrf, rubricas, observacoes",
-    )
-    .eq("apuracao_id", row.id)
-    .order("nome");
-  if (erroFunc) throw new Error("Nao foi possivel carregar os funcionarios da folha.");
-
-  return {
-    apuracao: {
-      id: row.id,
-      competencia: String(row.competencia).slice(0, 10),
-      arquivoNome: row.arquivo_nome,
-      empresaRelatorio: row.empresa_relatorio ?? { codigo: null, nome: "", cnpj: null },
-      totais: row.totais ?? { proventos: 0, descontos: 0, liquido: 0 },
-      encargos: row.encargos ?? {},
-      situacoes: row.situacoes ?? {},
-      resumoRubricas: row.resumo_rubricas ?? [],
-      manuais: row.manuais ?? {},
-      atualizadoEm: row.updated_at,
-    },
-    funcionarios: (linhas ?? []).map((f) => ({
-      id: f.id,
-      matricula: f.matricula,
-      nome: f.nome,
-      situacao: f.situacao,
-      departamento: f.departamento,
-      cargo: f.cargo,
-      salario: f.salario === null ? null : Number(f.salario),
-      proventos: Number(f.proventos),
-      descontos: Number(f.descontos),
-      liquido: Number(f.liquido),
-      baseInss: Number(f.base_inss),
-      baseFgts: Number(f.base_fgts),
-      valorFgts: Number(f.valor_fgts),
-      baseIrrf: Number(f.base_irrf),
-      rubricas: f.rubricas ?? [],
-      observacoes: f.observacoes ?? [],
-    })),
-  };
-}
-
-/** Configuração (efeito e categoria) das rubricas da folha da empresa. */
-export async function getConfigRubricasFolha(empresaIdParam?: string): Promise<ConfigRubrica[]> {
-  const empresaId = await resolverEmpresaId(empresaIdParam);
-  if (!empresaId) return [];
-
-  const supabase = await criarSupabaseObrigatorio();
-  const { data, error } = await supabase
-    .from("folha_rubricas")
-    .select("codigo, tipo, efeito, categoria")
-    .eq("empresa_id", empresaId);
-
-  if (error) {
-    if (/folha_rubricas/i.test(error.message)) return [];
-    throw new Error("Nao foi possivel carregar as rubricas da folha.");
-  }
-  return (data ?? []) as ConfigRubrica[];
+  // Uma linha por unidade: o mês aparece uma vez só
+  return [...new Set((data ?? []).map((row) => String(row.competencia).slice(0, 10)))];
 }
 
 export async function getCompetencias(empresaIdParam?: string): Promise<string[]> {

@@ -10,11 +10,12 @@
     "verifica:parsers": "tsx scripts/verifica-parsers.ts",
     "verifica:modelos": "tsx scripts/verifica-modelos.ts",
     "verifica:folha": "tsx scripts/verifica-folha.ts",
+    "verifica:folha-analitica": "tsx scripts/verifica-folha-analitica.mts",
     "verifica:extrato": "tsx scripts/verifica-extrato.mts",
     "verifica:vendas": "tsx scripts/verifica-vendas.mts",
     "verifica:validacao": "tsx scripts/verifica-validacao.mts",
     "verifica:assinatura": "tsx scripts/verifica-assinatura.mts",
-    "verifica": "npm run verifica:parsers && npm run verifica:modelos && npm run verifica:folha && npm run verifica:extrato && npm run verifica:vendas && npm run verifica:validacao && npm run verifica:assinatura",
+    "verifica": "npm run verifica:parsers && npm run verifica:modelos && npm run verifica:folha && npm run verifica:folha-analitica && npm run verifica:extrato && npm run verifica:vendas && npm run verifica:validacao && npm run verifica:assinatura",
     "seed:supabase": "tsx scripts/seed-supabase.mts",
     "seed:demo": "tsx scripts/seed-supabase.mts"
   },

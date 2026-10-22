@@ -164,6 +164,9 @@ export async function removerUnidade(empresaId: string, unidadeId: string) {
     .delete()
     .eq("id", unidadeId)
     .eq("empresa_id", empresaId);
+  if (error?.code === "23503") {
+    throw new Error("A unidade tem folha de pagamento apurada e não pode ser removida.");
+  }
   if (error) throw new Error("Não foi possível remover a unidade.");
   revalidarEmpresa(empresaId);
 }
